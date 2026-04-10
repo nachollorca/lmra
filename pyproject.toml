@@ -1,0 +1,17 @@
+[project]
+name = "lmra"
+version = "0.1.0"
+description = "Language Model Relational Agent"
+readme = "README.md"
+authors = [
+    { name = "Ignacio Llorca", email = "nllorca@proton.me" }
+]
+requires-python = ">=3.13"
+dependencies = [
+    "lmdk",
+    "sqlalchemy"
+]
+
+[build-system]
+requires = ["uv_build>=0.11.1,<0.12.0"]
+build-backend = "uv_build"
