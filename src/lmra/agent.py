@@ -1,58 +1,46 @@
 from dataclasses import dataclass, field
-from typing import Generator
+from typing import Generator, Literal, TypeAlias
 
 from lmdk import Message, UserMessage, complete
+from pydantic import BaseModel
 from sqlalchemy.orm import DeclarativeBase, Session
 
 from .code import execute, validate
 from .context import build
 
 
-# I am not sure if we have enough reason to formalize a dataclass to hold these two
 @dataclass
 class State:
-    # messages is clear, but we should also store the current snapshot of the database
-    # i am not sure if it should be a path to sqlite
-    # or a sqlalchemy session
-    # or a dict with the serialized db made from database_manager.serialize
-    # the main advantage of the serialization is that we could compute the diff between snapshots
-    # effectively informing of additions / deletions / edits
-    # but of course you need some time to serialize / compare / deserialize
     session: Session = field(default_factory=Session)
     messages: list[Message] = field(default_factory=list)
+    namespace: dict = field(default_factory=dict)
 
 
-# I am not sure if this is the standard, maybe we could go with some typing.Literal for simplicity
-class LoopSignal(Enum):
-    LM_COMPLETION = auto()
-    CODE_VALIDATION = (  # I am not sure if this is useful, it will always be quick, but can inform users
-        auto()
-    )
-    CODE_EXECUTION = auto()
+class Output(BaseModel):
+    message: str
+    code: str
+
+
+LoopSignal: TypeAlias = Literal["COMPLETION", "VALIDATION", "EXECUTION"]
+Event: TypeAlias = LoopSignal | Message
 
 
 def run(
     state: State,
-    base: type[  # this must match the database snapshot passed in state, should we check?
-        DeclarativeBase
-    ],
+    schema: type[DeclarativeBase],
     model: str,
-) -> Generator[  # Is there a vanilla python Iterator that we could use instead of typing.Generator?
-    Message | LoopSignal, None, State
-]:
+) -> Generator[Event, None, State]:
     """Execute the agentic loop.
 
-    The generator **yields**: every intermediate assistant message (suitable for
-    streaming as Server-Sent Events) and loop signal (suitable to inform user of the state)
-    and **returns** the mutated ``State`` containing the full conversation and the
-    (possibly modified) database.
+    **yields** ``Event``: every intermediate assistant message and loop signal
+    **returns** ``State``: full conversation, database snapshot and python namespace.
 
     An intermediate turn is one where the assistant message carries ``.code``;
     the loop ends as soon as the assistant responds without code.
 
     Args:
-        state: Conversation and database state (mutated in place).
-        base:  SQLAlchemy declarative base that defines the schema.
+        state: Conversation, database state and python namespace (mutated in place).
+        schema: SQLAlchemy declarative base that defines the db signature.
         model: Model identifier forwarded to ``complete()``.
 
     Yields:
@@ -61,61 +49,45 @@ def run(
     Returns:
         The mutated ``State``.
     """
-    yield LoopSignal.LM_COMPLETION
-    system_instruction = build()
-    response = complete(
-        model=model, messages=state.messages, system_instruction=system_instruction
-    )
-    state.messages.append(response.message)
+    system_instruction = build(session=state.session, base=schema)
 
-    # If the model answers directly (no code), return immediately.
-    code = response.output.code
-    if not code:
-        return state
+    def _call() -> Generator[Event, None, Output]:
+        """Single LM call."""
+        yield "COMPLETION"
+        response = complete(
+            model=model,
+            prompt=state.messages,
+            system_instruction=system_instruction,
+            output_schema=Output,
+        )
+        state.messages.append(response.message)
+        yield response.message
+        return response.output
 
-    # otherwise, yield the intermediate result and trigger agentic loop
-    yield response.message
+    output = yield from _call()
+    code = output.code
 
     while code:
         # --- validate ---------------------------------------------------
-        yield LoopSignal.CODE_VALIDATION
-        is_valid, reason = validate(code=code)
+        yield "VALIDATION"
+        is_valid, reason = validate(code=code, allowed_imports=None)
         if not is_valid:
             message = UserMessage(f"Code rejected: {reason}")
             state.messages.append(message)
             yield message
 
-            yield LoopSignal.LM_COMPLETION
-            response = complete(
-                model=model,
-                messages=state.messages,
-                system_instruction=system_instruction,
-            )
-            state.messages.append(response.message)
-            yield response.message
+            output = yield from _call()
+            code = output.code
             continue
 
         # --- execute ----------------------------------------------------
-        yield LoopSignal.CODE_EXECUTION
-        result = execute(code=response.code, session=state.session)
+        yield "EXECUTION"
+        result = execute(code=code, session=state.session, namespace=state.namespace)
         message = UserMessage(f"Execution result:\n{result}")
         state.messages.append(message)
-        # I am not sure if it is a good idea to update the system_instruction every time we run code
-        # Just in case the code actually did modify the database
-        # But maybe it'd be weird to have a system instruction that contradicts some of the intermediate messages
         yield message
 
-        yield LoopSignal.LM_COMPLETION
-        response = complete(
-            model=model, messages=state.messages, system_instruction=system_instruction
-        )
-        state.messages.append(response.message)
-        code = response.output.code
-        yield response.message
+        output = yield from _call()
+        code = output.code
 
-    # Loop exited -> last response has no code; it is the final answer.
     return state
-
-
-# it feels like there is some duplication in the completion / message yielding / loop signal ...
-# we might want to abstract some atomic helpers
