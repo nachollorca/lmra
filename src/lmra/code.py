@@ -15,7 +15,7 @@ def validate(code: str, allowed_imports: list[str] | None) -> tuple[bool, str]:
     raise NotImplementedError
 
 
-def execute(code: str, session: Session, namespace: dict) -> str:
+def execute(code: str, db_session: Session, namespace: dict) -> str:
     """Execute *code* inside a sandboxed namespace that includes *session*.
 
     Args:
@@ -27,7 +27,7 @@ def execute(code: str, session: Session, namespace: dict) -> str:
         A string representation of stdout / return value / traceback.
         The namespace is modified in-place.
     """
-    namespace["session"] = session
+    namespace["session"] = db_session
     buf = io.StringIO()
     try:
         compiled = compile(code, "<agent>", "exec")

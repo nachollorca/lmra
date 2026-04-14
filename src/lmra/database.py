@@ -1,7 +1,9 @@
 from sqlalchemy.orm import DeclarativeBase, Session
 
 
-def deserialize(data: dict[str, list[dict]], base: type[DeclarativeBase]) -> Session:
+def deserialize(
+    data: dict[str, list[dict]], db_schema: type[DeclarativeBase]
+) -> Session:
     """Unpack a JSON-serialised database state into an SQLAlchemy session.
 
     Creates an in-memory SQLite database, issues ``Base.metadata.create_all``,
@@ -9,7 +11,7 @@ def deserialize(data: dict[str, list[dict]], base: type[DeclarativeBase]) -> Ses
 
     Args:
         data: Mapping of ``{table_name: [row_dict, ...]}``.
-        base: The declarative base whose metadata describes the schema.
+        db_schema: The declarative base whose metadata describes the schema.
 
     Returns:
         A ready-to-use SQLAlchemy ``Session`` bound to the in-memory database.
@@ -17,14 +19,37 @@ def deserialize(data: dict[str, list[dict]], base: type[DeclarativeBase]) -> Ses
     raise NotImplementedError
 
 
-def serialize(session: Session, base: type[DeclarativeBase]) -> dict[str, list[dict]]:
+def serialize(
+    db_session: Session, db_schema: type[DeclarativeBase]
+) -> dict[str, list[dict]]:
     """Freeze the current database state into a JSON-serialisable dict.
 
     Args:
-        session: The active session to read from.
-        base:    The declarative base whose metadata describes the schema.
+        db_session: The active session to read from.
+        db_schema: The declarative base whose metadata describes the schema.
 
     Returns:
         ``{table_name: [row_dict, ...]}`` for every table in the schema.
     """
+    raise NotImplementedError
+
+
+def get_overview(db_session: Session) -> str:
+    """Inspects the database state and returns a string summarizing it for the LM.
+
+    Return extra information for tables with attribute ``__overview__`` set to ``True``"""
+    raise NotImplementedError
+
+
+def get_schema(db_schema: type[DeclarativeBase]) -> str:
+    """Returns a string for the LM showing the Tables and Relationships conforming the database.
+
+    It only shows tables where attribute ``__show__`` is set to True."""
+    raise NotImplementedError
+
+
+def get_table_imports(db_schema: type[DeclarativeBase]) -> str:
+    """Returns the ORM tables in ``from [module] import tables``.
+
+    It only shows tables where attribute ``__show__`` is set to True."""
     raise NotImplementedError
