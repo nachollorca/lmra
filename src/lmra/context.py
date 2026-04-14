@@ -1,3 +1,5 @@
+"""Contains the utils to engineer the context passed to the agent."""
+
 from lmdk import render_template
 from sqlalchemy.orm import DeclarativeBase, Session
 
@@ -7,6 +9,7 @@ from .database import overview, schema_text, table_imports
 def _build_first_cell(base: type[DeclarativeBase]) -> str:
     """Builds the first cell that will always be executed."""
     imports = table_imports(base=base)
+    imports
     # here we have to import session from sqlalchemy, the engine, etc.
     raise NotImplementedError
 

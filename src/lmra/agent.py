@@ -1,3 +1,5 @@
+"""Contains the agentic loop and related utils."""
+
 from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Generator, TypeAlias
