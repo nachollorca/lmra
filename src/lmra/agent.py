@@ -1,12 +1,16 @@
 from dataclasses import dataclass, field
-from typing import Generator, Literal, TypeAlias
+from enum import StrEnum
+from typing import Generator, TypeAlias
 
 from lmdk import Message, UserMessage, complete
 from pydantic import BaseModel, Field
+from sqlalchemy import create_engine
 from sqlalchemy.orm import DeclarativeBase, Session
 
 from .code import execute, validate
-from .context import build
+from .context import _build_first_cell, build
+
+MAX_LOOPS = 20
 
 
 @dataclass
@@ -14,12 +18,12 @@ class State:
     """Contains the different objects whose state is modified through the agentic loop.
 
     Attributes:
-        db_session: the sqlalchemy database connection
+        session: the sqlalchemy database connection
         messages: the conversation history
         namespace: symbols of the code environment that the agent uses
     """
 
-    db_session: Session = field(default_factory=Session)
+    session: Session | None = None
     messages: list[Message] = field(default_factory=list)
     namespace: dict = field(default_factory=dict)
 
@@ -31,14 +35,63 @@ class Output(BaseModel):
     code: str = Field(default="", description="The optional code to run.")
 
 
-# Type aliases for convinience
-LoopSignal: TypeAlias = Literal["COMPLETION", "VALIDATION", "EXECUTION"]
-Event: TypeAlias = LoopSignal | Message
+class Signal(StrEnum):
+    """Signals emitted by the agentic loop to indicate current stage."""
+
+    COMPLETION = "COMPLETION"
+    VALIDATION = "VALIDATION"
+    EXECUTION = "EXECUTION"
+    EXCEEDED = "EXCEEDED"
+
+
+Event: TypeAlias = Signal | Message
+
+
+def _complete(
+    state: State,
+    model: str,
+    system_instruction: str,
+) -> Generator[Event, None, Output]:
+    """Single LM call: append the response, yield signals and the message, return parsed output."""
+    yield Signal.COMPLETION
+    response = complete(
+        model=model,
+        prompt=state.messages,
+        system_instruction=system_instruction,
+        output_schema=Output,
+    )
+    state.messages.append(response.message)
+    yield response.message
+    return response.output
+
+
+def _init_session(state: State, base: type[DeclarativeBase]) -> None:
+    """Initialize the SQLAlchemy session when missing (first call)."""
+    if state.session is None:
+        engine = create_engine("sqlite://")
+        base.metadata.create_all(engine)
+        state.session = Session(engine)
+
+
+def _init_namespace(state: State, base: type[DeclarativeBase]) -> None:
+    """Bootstrap or refresh the code execution namespace.
+
+    On the first call the namespace is empty, so a first cell is executed to
+    populate imports and inject ``session``.  On follow-up calls the namespace
+    already carries everything from the previous invocation; only ``session``
+    is refreshed because the database may have changed between calls (user side).
+    """
+    if not state.namespace:
+        first_cell = _build_first_cell(base=base)
+        state.namespace["session"] = state.session
+        execute(source=first_cell, namespace=state.namespace)
+    else:
+        state.namespace["session"] = state.session
 
 
 def run(
     state: State,
-    db_schema: type[DeclarativeBase],
+    base: type[DeclarativeBase],
     model: str,
 ) -> Generator[Event, None, State]:
     """Execute the agentic loop.
@@ -48,53 +101,47 @@ def run(
 
     Args:
         state: Conversation, database state and python namespace (mutated in place).
-        db_schema: SQLAlchemy declarative base that defines the db signature.
+        base: SQLAlchemy declarative base that defines the db schema.
         model: Model identifier forwarded to ``complete()``.
 
     Yields:
-        ``Event``: every intermediate assistant message and loop signal
+        ``Event``: every intermediate assistant message and loop signal.
 
     Returns:
-        ``State``: possibly modified conversation, database snapshot and python namespace
+        ``State``: possibly modified conversation, database snapshot and python namespace.
     """
-    system_instruction = build(db_session=state.db_session, db_schema=db_schema)
+    _init_session(state, base)
+    _init_namespace(state, base)
 
-    def _call() -> Generator[Event, None, Output]:
-        """Single LM call helper to avoid duplication in every completion."""
-        yield "COMPLETION"
-        response = complete(
-            model=model,
-            prompt=state.messages,
-            system_instruction=system_instruction,
-            output_schema=Output,
-        )
-        state.messages.append(response.message)
-        yield response.message
-        return response.output
+    assert state.session is not None  # already initialized in _init_session
+    system_instruction = build(session=state.session, base=base)
 
-    output = yield from _call()
+    output = yield from _complete(state, model, system_instruction)
     code = output.code
 
+    loops = 0
     while code:
-        yield "VALIDATION"
-        is_valid, reason = validate(code=code, allowed_imports=None)
+        if loops >= MAX_LOOPS:
+            yield Signal.EXCEEDED
+            break
+        loops += 1
+
+        yield Signal.VALIDATION
+        is_valid, reason = validate(source=code, allowed_imports=None)
         if not is_valid:
             message = UserMessage(f"Code rejected: {reason}")
             state.messages.append(message)
             yield message
-            output = yield from _call()
+            output = yield from _complete(state, model, system_instruction)
             code = output.code
             continue
 
-        yield "EXECUTION"
-        # If the namespace is empty, we should probably execute the first cell
-        result = execute(
-            code=code, db_session=state.db_session, namespace=state.namespace
-        )
+        yield Signal.EXECUTION
+        result = execute(source=code, namespace=state.namespace)
         message = UserMessage(f"Execution result:\n{result}")
         state.messages.append(message)
         yield message
-        output = yield from _call()
+        output = yield from _complete(state, model, system_instruction)
         code = output.code
 
     return state

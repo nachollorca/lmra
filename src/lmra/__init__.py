@@ -1,3 +1,3 @@
-from agent import run
+from .agent import run
 
 __all__ = ["run"]
