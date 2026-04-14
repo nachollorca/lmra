@@ -2,16 +2,60 @@
 name = "lmra"
 version = "0.1.0"
 description = "Language Model Relational Agent"
-readme = "README.md"
-authors = [
-    { name = "Ignacio Llorca", email = "nllorca@proton.me" }
-]
 requires-python = ">=3.13"
+license = { text = "MIT" }
+readme = "README.md"
+authors = [{ name = "Ignacio Llorca", email = "nllorca@proton.me" }]
 dependencies = [
     "lmdk",
     "sqlalchemy"
 ]
 
+[dependency-groups]
+dev = [
+    "pytest-cov"
+]  # complexipy, ruff, ty are run via uvx
+
 [build-system]
 requires = ["uv_build>=0.11.1,<0.12.0"]
 build-backend = "uv_build"
+
+[tool.ruff]
+fix = true
+line-length = 100
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["D"]
+
+[tool.ruff.lint.isort]
+combine-as-imports = true
+
+[tool.ruff.lint]
+select = ["D", "E", "F"]
+ignore = ["D105", "D107"]
+
+[tool.coverage.run]
+source = ["src"]
+omit = ["tests/*"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "raise NotImplementedError",
+    "if TYPE_CHECKING:",
+]
+
+[tool.semantic_release]
+version_toml = ["pyproject.toml:project.version"]
+build_command = ""
+commit_message = "chore: release {version}"
+commit_parser = "conventional"
+tag_format = "v{version}"
+changelog_file = false
+
+[tool.semantic_release.branches.main]
+match = "main"
+prerelease = false
