@@ -44,7 +44,7 @@ FORBIDDEN_MODULE_NAMES = frozenset(
     }
 )
 
-FORBIDDEN_DUNDER_ATTRS = frozenset(
+FORBIDDEN_ATTRIBUTES = frozenset(
     {
         "__globals__",
         "__builtins__",
@@ -89,7 +89,7 @@ def _check_name(node: ast.Name) -> str:
 
 def _check_attribute(node: ast.Attribute) -> str:
     """Block dangerous dunder attribute access."""
-    if node.attr in FORBIDDEN_DUNDER_ATTRS:
+    if node.attr in FORBIDDEN_ATTRIBUTES:
         return f"Forbidden attribute access: {node.attr}"
     return ""
 
