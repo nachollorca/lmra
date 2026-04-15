@@ -95,6 +95,7 @@ def run(
     state: State,
     base: type[DeclarativeBase],
     model: str,
+    allowed_imports: list[str] = [],
 ) -> Generator[Event, None, State]:
     """Execute the agentic loop.
 
@@ -129,8 +130,7 @@ def run(
         loops += 1
 
         yield Signal.VALIDATION
-        is_valid, reason = validate(source=code, allowed_imports=None)
-        if not is_valid:
+        if reason := validate(source=code, allowed_imports=allowed_imports):
             message = UserMessage(f"Code rejected: {reason}")
             state.messages.append(message)
             yield message
