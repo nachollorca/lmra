@@ -8,9 +8,6 @@ import ast
 import contextlib
 import io
 import traceback
-from concurrent.futures import ThreadPoolExecutor, TimeoutError
-
-TIMEOUT = 180  # seconds
 
 FORBIDDEN_BUILTINS = frozenset(
     {
@@ -129,9 +126,11 @@ def validate(source: str, allowed_imports: list[str]) -> str:
 def execute(source: str, namespace: dict) -> str:
     """Execute *source* code requested by the Agent inside *namespace*.
 
-    The execution runs in a ThreadPoolExecutor to handle timeouts.
-    Note: A timed-out execution will continue to run in the background
-    until the thread naturally finishes or the process exits.
+    Runs synchronously in the calling thread.  There is no timeout guard:
+    the model could theoretically generate infinitely-running code (e.g. an
+    infinite loop) which cannot be reliably caught at the AST validation
+    level.  Callers that need a timeout should enforce it externally (e.g.
+    by cancelling the ``run()`` generator or wrapping the call site).
 
     Args:
         source: Python/SQLAlchemy source code produced by the model.
@@ -142,20 +141,11 @@ def execute(source: str, namespace: dict) -> str:
     Returns:
         A string with stdout output, a traceback, or a status message.
     """
-
-    def _run() -> str:
-        buf = io.StringIO()
-        try:
-            compiled = compile(source, "<agent>", "exec")
-            with contextlib.redirect_stdout(buf):
-                exec(compiled, namespace)
-            return buf.getvalue() or "Code executed successfully but produced no stdout."
-        except Exception:
-            return traceback.format_exc()
-
-    with ThreadPoolExecutor(max_workers=1) as executor:
-        future = executor.submit(_run)
-        try:
-            return future.result(timeout=TIMEOUT)
-        except TimeoutError:
-            return f"Execution timed out after {TIMEOUT} seconds."
+    buf = io.StringIO()
+    try:
+        compiled = compile(source, "<agent>", "exec")
+        with contextlib.redirect_stdout(buf):
+            exec(compiled, namespace)
+        return buf.getvalue() or "Code executed successfully but produced no stdout."
+    except Exception:
+        return traceback.format_exc()
