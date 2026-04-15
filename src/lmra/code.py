@@ -7,8 +7,8 @@ https://github.com/huggingface/smolagents/blob/main/src/smolagents/local_python_
 import ast
 import contextlib
 import io
-import threading
 import traceback
+from concurrent.futures import ThreadPoolExecutor, TimeoutError
 
 TIMEOUT = 180  # seconds
 
@@ -129,8 +129,9 @@ def validate(source: str, allowed_imports: list[str]) -> str:
 def execute(source: str, namespace: dict) -> str:
     """Execute *source* code requested by the Agent inside *namespace*.
 
-    The LM can produce infinite loops and we cannot catch that with AST,
-    so the execution runs on a separate thread that we can timeout.
+    The execution runs in a ThreadPoolExecutor to handle timeouts.
+    Note: A timed-out execution will continue to run in the background
+    until the thread naturally finishes or the process exits.
 
     Args:
         source: Python/SQLAlchemy source code produced by the model.
@@ -141,28 +142,20 @@ def execute(source: str, namespace: dict) -> str:
     Returns:
         A string with stdout output, a traceback, or a status message.
     """
-    buf = io.StringIO()
 
-    # list so that inner function running on another thread can mutate it
-    # plain variable would just create a thread-local binding
-    error_holder: list[str | None] = [None]
-
-    def _run() -> None:
+    def _run() -> str:
+        buf = io.StringIO()
         try:
             compiled = compile(source, "<agent>", "exec")
             with contextlib.redirect_stdout(buf):
                 exec(compiled, namespace)
+            return buf.getvalue() or "Code executed successfully but produced no stdout."
         except Exception:
-            error_holder[0] = traceback.format_exc()
+            return traceback.format_exc()
 
-    thread = threading.Thread(target=_run, daemon=True)
-    thread.start()
-    thread.join(timeout=TIMEOUT)
-
-    if thread.is_alive():
-        return f"Execution timed out after {TIMEOUT} seconds."
-
-    if error_holder[0] is not None:
-        return error_holder[0]
-
-    return buf.getvalue() or "Code executed successfully but produced no stdout."
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        future = executor.submit(_run)
+        try:
+            return future.result(timeout=TIMEOUT)
+        except TimeoutError:
+            return f"Execution timed out after {TIMEOUT} seconds."

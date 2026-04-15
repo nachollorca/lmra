@@ -106,6 +106,7 @@ def run(
         state: Conversation, database state and python namespace (mutated in place).
         base: SQLAlchemy declarative base that defines the db schema.
         model: Model identifier forwarded to ``complete()``.
+        allowed_imports: Any vanilla module or third-party package that the agent can use.
 
     Yields:
         ``Event``: every intermediate assistant message and loop signal.
