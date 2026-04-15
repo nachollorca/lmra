@@ -10,7 +10,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import DeclarativeBase, Session
 
 from .code import execute, validate
-from .context import _build_first_cell, build
+from .context import render, render_bootstrap_code
 
 MAX_LOOPS = 20
 
@@ -75,7 +75,7 @@ def _init_session(state: State, base: type[DeclarativeBase]) -> None:
         state.session = Session(engine)
 
 
-def _init_namespace(state: State, base: type[DeclarativeBase]) -> None:
+def _init_namespace(state: State, base: type[DeclarativeBase], first_cell: str) -> None:
     """Bootstrap or refresh the code execution namespace.
 
     On the first call the namespace is empty, so a first cell is executed to
@@ -84,7 +84,6 @@ def _init_namespace(state: State, base: type[DeclarativeBase]) -> None:
     is refreshed because the database may have changed between calls (user side).
     """
     if not state.namespace:
-        first_cell = _build_first_cell(base=base)
         state.namespace["session"] = state.session
         execute(source=first_cell, namespace=state.namespace)
     else:
@@ -106,6 +105,7 @@ def run(
         state: Conversation, database state and python namespace (mutated in place).
         base: SQLAlchemy declarative base that defines the db schema.
         model: Model identifier forwarded to ``complete()``.
+        allowed_imports: Any vanilla module or third-party package that the agent can use.
 
     Yields:
         ``Event``: every intermediate assistant message and loop signal.
@@ -114,10 +114,10 @@ def run(
         ``State``: possibly modified conversation, database snapshot and python namespace.
     """
     _init_session(state, base)
-    _init_namespace(state, base)
+    first_cell = render_bootstrap_code(base=base)
+    _init_namespace(state, base, first_cell)
 
-    assert state.session is not None  # already initialized in _init_session
-    system_instruction = build(session=state.session, base=base)
+    system_instruction = render(base=base, first_cell=first_cell)
 
     output = yield from _complete(state, model, system_instruction)
     code = output.code

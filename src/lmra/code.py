@@ -7,10 +7,7 @@ https://github.com/huggingface/smolagents/blob/main/src/smolagents/local_python_
 import ast
 import contextlib
 import io
-import threading
 import traceback
-
-TIMEOUT = 180  # seconds
 
 FORBIDDEN_BUILTINS = frozenset(
     {
@@ -44,7 +41,7 @@ FORBIDDEN_MODULE_NAMES = frozenset(
     }
 )
 
-FORBIDDEN_DUNDER_ATTRS = frozenset(
+FORBIDDEN_ATTRIBUTES = frozenset(
     {
         "__globals__",
         "__builtins__",
@@ -89,7 +86,7 @@ def _check_name(node: ast.Name) -> str:
 
 def _check_attribute(node: ast.Attribute) -> str:
     """Block dangerous dunder attribute access."""
-    if node.attr in FORBIDDEN_DUNDER_ATTRS:
+    if node.attr in FORBIDDEN_ATTRIBUTES:
         return f"Forbidden attribute access: {node.attr}"
     return ""
 
@@ -129,8 +126,11 @@ def validate(source: str, allowed_imports: list[str]) -> str:
 def execute(source: str, namespace: dict) -> str:
     """Execute *source* code requested by the Agent inside *namespace*.
 
-    The LM can produce infinite loops and we cannot catch that with AST,
-    so the execution runs on a separate thread that we can timeout.
+    Runs synchronously in the calling thread.  There is no timeout guard:
+    the model could theoretically generate infinitely-running code (e.g. an
+    infinite loop) which cannot be reliably caught at the AST validation
+    level.  Callers that need a timeout should enforce it externally (e.g.
+    by cancelling the ``run()`` generator or wrapping the call site).
 
     Args:
         source: Python/SQLAlchemy source code produced by the model.
@@ -142,27 +142,10 @@ def execute(source: str, namespace: dict) -> str:
         A string with stdout output, a traceback, or a status message.
     """
     buf = io.StringIO()
-
-    # list so that inner function running on another thread can mutate it
-    # plain variable would just create a thread-local binding
-    error_holder: list[str | None] = [None]
-
-    def _run() -> None:
-        try:
-            compiled = compile(source, "<agent>", "exec")
-            with contextlib.redirect_stdout(buf):
-                exec(compiled, namespace)
-        except Exception:
-            error_holder[0] = traceback.format_exc()
-
-    thread = threading.Thread(target=_run, daemon=True)
-    thread.start()
-    thread.join(timeout=TIMEOUT)
-
-    if thread.is_alive():
-        return f"Execution timed out after {TIMEOUT} seconds."
-
-    if error_holder[0] is not None:
-        return error_holder[0]
-
-    return buf.getvalue() or "Code executed successfully but produced no stdout."
+    try:
+        compiled = compile(source, "<agent>", "exec")
+        with contextlib.redirect_stdout(buf):
+            exec(compiled, namespace)
+        return buf.getvalue() or "Code executed successfully but produced no stdout."
+    except Exception:
+        return traceback.format_exc()
