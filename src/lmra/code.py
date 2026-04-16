@@ -116,7 +116,7 @@ def validate(source: str, allowed_imports: list[str]) -> str:
             reason = _check_name(node)
         elif isinstance(node, ast.Attribute):
             reason = _check_attribute(node)
-        # Exit if any checker populated `reason`
+        # Exit if any checker populated `reason` -> code is invalid
         if reason:
             break
 
@@ -127,10 +127,8 @@ def execute(source: str, namespace: dict) -> str:
     """Execute *source* code requested by the Agent inside *namespace*.
 
     Runs synchronously in the calling thread.  There is no timeout guard:
-    the model could theoretically generate infinitely-running code (e.g. an
-    infinite loop) which cannot be reliably caught at the AST validation
-    level.  Callers that need a timeout should enforce it externally (e.g.
-    by cancelling the ``run()`` generator or wrapping the call site).
+    the model could theoretically generate an infinite loop that we cannot
+    catch at the AST validation level.
 
     Args:
         source: Python/SQLAlchemy source code produced by the model.

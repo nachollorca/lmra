@@ -13,7 +13,8 @@ dependencies = [
 
 [dependency-groups]
 dev = [
-    "pytest-cov"
+    "pytest-cov",
+    "streamlit>=1.56.0",
 ]  # complexipy, ruff, ty are run via uvx
 
 [build-system]

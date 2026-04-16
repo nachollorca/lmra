@@ -31,5 +31,6 @@ analyze-complexity:
 run file:
     uv run --env-file .env {{ file }}
 
-validate model="":
-    uv run --env-file .env example.py {{ model }}
+# Project specific commands
+demo:
+    uv run streamlit run demo/app.py
