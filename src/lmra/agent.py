@@ -10,7 +10,8 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import DeclarativeBase, Session
 
 from .code import execute, validate
-from .context import render, render_bootstrap_code
+from .context import render, shown_classes
+from .tools import Tool, make_disclose_fn
 
 MAX_LOOPS = 20
 
@@ -75,25 +76,50 @@ def _init_session(state: State, base: type[DeclarativeBase]) -> None:
         state.session = Session(engine)
 
 
-def _init_namespace(state: State, base: type[DeclarativeBase], first_cell: str) -> None:
-    """Bootstrap or refresh the code execution namespace.
+def _init_namespace(
+    state: State,
+    base: type[DeclarativeBase],
+    tools: list[Tool],
+) -> dict[str, str]:
+    """Populate or refresh the agent code execution namespace.
 
-    On the first call the namespace is empty, so a first cell is executed to
-    populate imports and inject ``session``.  On follow-up calls the namespace
-    already carries everything from the previous invocation; only ``session``
-    is refreshed because the database may have changed between calls (user side).
+    On the first call the namespace is empty, so all symbols are injected:
+    ``session``, ORM model classes, tool functions, and ``disclose``.
+    On follow-up calls only ``session`` is refreshed because the database
+    may have changed between calls (user side).
+
+    Returns:
+        A ``{name: description}`` dict of every injected **infrastructure**
+        symbol.  Tool symbols are excluded — their source of truth is the
+        ``Tool`` object itself, rendered separately by ``_render_tools_summary``.
     """
-    if not state.namespace:
-        state.namespace["session"] = state.session
-        execute(source=first_cell, namespace=state.namespace)
-    else:
-        state.namespace["session"] = state.session
+    descriptions: dict[str, str] = {}
+
+    state.namespace["session"] = state.session
+    descriptions["session"] = "a `sqlalchemy.orm.Session` connected to the database."
+
+    for cls in shown_classes(base):
+        state.namespace[cls.__name__] = cls
+        descriptions[cls.__name__] = "ORM model class (see schema above)."
+
+    for t in tools:
+        state.namespace[t.name] = t.fn
+
+    if tools:
+        state.namespace["disclose"] = make_disclose_fn(tools)
+        descriptions["disclose"] = (
+            "`disclose(name: str) -> str` — prints the full signature"
+            " and docstring of a tool. Call it before using a tool you haven't seen yet."
+        )
+
+    return descriptions
 
 
 def run(
     state: State,
     base: type[DeclarativeBase],
     model: str,
+    tools: list[Tool] = [],
     allowed_imports: list[str] = [],
 ) -> Generator[Event, None, State]:
     """Execute the agentic loop.
@@ -105,6 +131,7 @@ def run(
         state: Conversation, database state and python namespace (mutated in place).
         base: SQLAlchemy declarative base that defines the db schema.
         model: Model identifier forwarded to ``complete()``.
+        tools: User-provided tools the agent can call in generated code.
         allowed_imports: Any vanilla module or third-party package that the agent can use.
 
     Yields:
@@ -114,10 +141,9 @@ def run(
         ``State``: possibly modified conversation, database snapshot and python namespace.
     """
     _init_session(state, base)
-    first_cell = render_bootstrap_code(base=base)
-    _init_namespace(state, base, first_cell)
+    descriptions = _init_namespace(state, base, tools)
 
-    system_instruction = render(base=base, first_cell=first_cell)
+    system_instruction = render(base=base, tools=tools, descriptions=descriptions)
 
     output = yield from _complete(state, model, system_instruction)
     code = output.code

@@ -6,10 +6,12 @@ from pathlib import Path
 from lmdk import render_template
 from sqlalchemy.orm import DeclarativeBase
 
+from .tools import Tool
+
 _TEMPLATE_PATH = Path(__file__).parent / "prompt.jinja"
 
 
-def _shown_classes(base: type[DeclarativeBase]) -> list[type]:
+def shown_classes(base: type[DeclarativeBase]) -> list[type]:
     """Return mapped classes where ``__show__`` is True."""
     return [cls for cls in base.__subclasses__() if getattr(cls, "__show__", False)]
 
@@ -21,47 +23,55 @@ def _render_schema_source(base: type[DeclarativeBase]) -> str:
     source code via ``inspect.getsource``.  The sources are concatenated
     separated by blank lines.
     """
-    sources = [inspect.getsource(cls) for cls in _shown_classes(base)]
+    sources = [inspect.getsource(cls) for cls in shown_classes(base)]
     return "\n\n".join(sources)
 
 
-def _render_table_imports(base: type[DeclarativeBase]) -> str:
-    """Return ``from <module> import <Class>, ...`` lines for shown tables.
+def _render_symbols(descriptions: dict[str, str]) -> str:
+    """Format the symbol descriptions dict as a Markdown bullet list.
 
-    Groups classes by their defining module so a single import line is
-    produced per module.
+    Args:
+        descriptions: ``{name: description}`` as returned by ``_init_namespace``.
+
+    Returns:
+        A Markdown-formatted bullet list.
     """
-    by_module: dict[str, list[str]] = {}
-    for cls in _shown_classes(base):
-        module = cls.__module__
-        by_module.setdefault(module, []).append(cls.__name__)
-    lines = [f"from {mod} import {', '.join(names)}" for mod, names in by_module.items()]
-    return "\n".join(lines)
+    return "\n".join(f"- `{name}`: {desc}" for name, desc in descriptions.items())
 
 
-def render_bootstrap_code(base: type[DeclarativeBase]) -> str:
-    """Build the first cell that is auto-executed in the agent namespace.
+def _render_tools_summary(tools: list[Tool]) -> str:
+    """Render name + one-liner for each tool.
 
-    Includes ORM table imports and the essential SQLAlchemy import for
-    ``session`` (which is injected into the namespace externally).
+    This summary is shown in the system prompt.  The agent can call
+    ``disclose(name)`` to see full details.
+
+    Args:
+        tools: User-provided tools registered for this run.
+
+    Returns:
+        A Markdown-formatted bullet list, or empty string if no tools.
     """
-    lines = [
-        "from sqlalchemy.orm import Session",
-        _render_table_imports(base=base),
-    ]
-    return "\n".join(lines)
+    if not tools:
+        return ""
+    return "\n".join(f"- `{t.name}`: {t.short_description}" for t in tools)
 
 
-def render(base: type[DeclarativeBase], first_cell: str) -> str:
-    """Builds the system instruction for the LM with all context parts.
+def render(
+    base: type[DeclarativeBase],
+    tools: list[Tool],
+    descriptions: dict[str, str],
+) -> str:
+    """Build the system instruction for the LM with all context parts.
 
     Args:
         base: The declarative base describing the schema.
-        first_cell: Pre-computed first cell string (shown verbatim in the prompt).
+        tools: User-provided tools registered for this run.
+        descriptions: ``{name: description}`` of every namespace symbol,
+            as returned by ``_init_namespace`` in ``agent.py``.
     """
-    prompt = render_template(
+    return render_template(
         path=str(_TEMPLATE_PATH),
         SCHEMA=_render_schema_source(base=base),
-        FIRST_CELL=first_cell,
+        SYMBOLS=_render_symbols(descriptions),
+        TOOLS=_render_tools_summary(tools),
     )
-    return prompt
