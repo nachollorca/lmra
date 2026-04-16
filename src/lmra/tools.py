@@ -2,7 +2,14 @@
 
 import inspect
 from dataclasses import dataclass
-from typing import Callable
+from typing import Any, Callable, Protocol, cast
+
+
+class HasMetadata(Protocol):
+    """Protocol for objects that have __name__ and __doc__."""
+
+    __name__: str
+    __doc__: str | None
 
 
 @dataclass(frozen=True)
@@ -16,23 +23,25 @@ class Tool:
         full_description: Full signature and docstring for discovery.
     """
 
-    fn: Callable
+    fn: Callable[..., Any]
     name: str
     short_description: str
     full_description: str
 
     @classmethod
-    def from_function(cls, fn: Callable) -> "Tool":
+    def from_function(cls, fn: Any) -> "Tool":
         """Build a ``Tool`` from a plain function."""
-        name = fn.__name__
-        doc = inspect.cleandoc(fn.__doc__ or "")
+        # We use Any for fn to avoid complex Protocol issues with Callables,
+        # but we know it should have __name__ if it's a function.
+        name = getattr(fn, "__name__", "unknown")
+        doc = inspect.cleandoc(getattr(fn, "__doc__", "") or "")
         short = doc.split("\n", 1)[0] if doc else ""
         sig = inspect.signature(fn)
         full = f"{name}{sig}\n\n{doc}" if doc else f"{name}{sig}"
         return cls(fn=fn, name=name, short_description=short, full_description=full)
 
 
-def tool(fn: Callable) -> Tool:
+def tool(fn: Any) -> Tool:
     """Decorator that turns a function into a ``Tool``."""
     return Tool.from_function(fn)
 
