@@ -53,7 +53,7 @@ def render_bootstrap_code(base: type[DeclarativeBase]) -> str:
 
 
 def render(base: type[DeclarativeBase], first_cell: str) -> str:
-    """Build the system prompt.
+    """Builds the system instruction for the LM with all context parts.
 
     Args:
         base: The declarative base describing the schema.
