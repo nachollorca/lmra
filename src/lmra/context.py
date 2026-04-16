@@ -11,19 +11,14 @@ from .tools import Tool
 _TEMPLATE_PATH = Path(__file__).parent / "prompt.jinja"
 
 
-def shown_classes(base: type[DeclarativeBase]) -> list[type]:
-    """Return mapped classes where ``__show__`` is True."""
-    return [cls for cls in base.__subclasses__() if getattr(cls, "__show__", False)]
-
-
 def _render_schema_source(base: type[DeclarativeBase]) -> str:
-    """Return the source code of shown ORM classes for the LM prompt.
+    """Return the source code of ORM classes for the LM prompt.
 
-    Iterates mapped classes with ``__show__ == True`` and extracts their
-    source code via ``inspect.getsource``.  The sources are concatenated
-    separated by blank lines.
+    Extracts source code via ``inspect.getsource`` for every mapped class
+    registered under *base*.  The sources are concatenated separated by
+    blank lines.
     """
-    sources = [inspect.getsource(cls) for cls in shown_classes(base)]
+    sources = [inspect.getsource(cls) for cls in base.__subclasses__()]
     return "\n\n".join(sources)
 
 

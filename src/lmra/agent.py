@@ -10,7 +10,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import DeclarativeBase, Session
 
 from .code import execute, validate
-from .context import render, shown_classes
+from .context import render
 from .tools import Tool, make_disclose_fn
 
 MAX_LOOPS = 20
@@ -98,7 +98,7 @@ def _init_namespace(
     state.namespace["session"] = state.session
     descriptions["session"] = "a `sqlalchemy.orm.Session` connected to the database."
 
-    for cls in shown_classes(base):
+    for cls in base.__subclasses__():
         state.namespace[cls.__name__] = cls
         descriptions[cls.__name__] = "ORM model class (see schema above)."
 
