@@ -6,7 +6,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
-from lmra.agent import State
+from llmalchemy.agent import State
 
 MODELS = [
     "vertex:gemini-3-flash-preview",

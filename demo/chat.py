@@ -1,10 +1,10 @@
-"""Chat page — talk to the lmra agent with live signal feedback."""
+"""Chat page — talk to the llmalchemy agent with live signal feedback."""
 
 import streamlit as st
 from fixtures import Base
 from lmdk import AssistantMessage, UserMessage
 
-from lmra.agent import Output, Signal, run
+from llmalchemy.agent import Output, Signal, run
 
 SIGNAL_LABELS = {
     Signal.COMPLETION: ":material/lightbulb: Thinking…",

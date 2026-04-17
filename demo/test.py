@@ -1,9 +1,9 @@
-"""Demo script that exercises lmra.agent.run with schema access and a tool."""
+"""Demo script that exercises llmalchemy.agent.run with schema access and a tool."""
 
 from fixtures import Author, Base, Book, get_author_catalog
 from lmdk import UserMessage
 
-from lmra.agent import State, run
+from llmalchemy.agent import State, run
 
 MODEL = "vertex:gemini-3-flash-preview"
 
