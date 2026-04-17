@@ -35,7 +35,10 @@ class Tool:
         doc = inspect.cleandoc(getattr(fn, "__doc__", "") or "")
         short = doc.split("\n", 1)[0] if doc else ""
         sig = inspect.signature(fn)
-        full = f"{name}{sig}\n\n{doc}" if doc else f"{name}{sig}"
+        if doc:
+            full = f'def {name}{sig}:\n    """{doc}"""'
+        else:
+            full = f"def {name}{sig}:"
         return cls(fn=fn, name=name, short_description=short, full_description=full)
 
 
