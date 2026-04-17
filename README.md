@@ -16,7 +16,7 @@ Real applications have complex data models. To give the LM meaningful access you
 
 ### Code as the action space
 
-Research shows that letting LMs write and execute code instead of picking from a discrete set of tools produces stronger agents[1](https://arxiv.org/abs/2402.01030)[2](https://arxiv.org/pdf/2401.00812)[3](https://arxiv.org/pdf/2411.01747). Code gives the model composition (chain operations in one turn), control flow (loops, conditionals, error handling), and self-extension (define helper functions that persist in the namespace). A single code block can do what would otherwise take a long chain of tool calls.
+Research shows that letting LMs write and execute code instead of picking from a discrete set of tools produces stronger agents[[1](https://arxiv.org/abs/2402.01030)][[2](https://arxiv.org/pdf/2401.00812)][[3](https://arxiv.org/pdf/2411.01747)]. Code gives the model composition (chain operations in one turn), control flow (loops, conditionals, error handling), and self-extension (define helper functions that persist in the namespace). A single code block can do what would otherwise take a long chain of tool calls.
 
 But code execution alone doesn't solve the data access problem. The LM still needs some interface to read and modify application state. You're back to writing wrapper functions — unless the right abstraction already exists.
 
