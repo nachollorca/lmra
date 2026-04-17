@@ -1,6 +1,6 @@
-"""Demo script that exercises lmra.agent.run and verifies DB side-effects."""
+"""Demo script that exercises lmra.agent.run with schema access and a tool."""
 
-from base import Author, Base
+from fixtures import Author, Base, Book, get_author_catalog
 from lmdk import UserMessage
 
 from lmra.agent import State, run
@@ -9,13 +9,15 @@ MODEL = "vertex:gemini-3-flash-preview"
 
 state = State()
 
-# -- Turn 1: ask the agent to insert an author --------------------------
+# -- Turn 1: seed some data ---------------------------------------------
 
 print("=" * 60)
-print("TURN 1 — Insert an author")
+print("TURN 1 — Insert authors and books")
 print("=" * 60)
-state.messages.append(UserMessage("Add an author named 'Jorge Luis Borges' to the database."))
-gen = run(state=state, base=Base, model=MODEL)
+state.messages.append(
+    UserMessage("Make authors Almudena Grandes and Rosa Montero and two books for each")
+)
+gen = run(state=state, base=Base, model=MODEL, tools=[get_author_catalog])
 try:
     while True:
         event = next(gen)
@@ -23,17 +25,20 @@ try:
 except StopIteration as exc:
     state = exc.value
 
-# -- Verify the row was actually created --------------------------------
-authors = state.session.query(Author).filter_by(name="Jorge Luis Borges").all()
-assert len(authors) == 1, f"Expected 1 author, got {len(authors)}: {authors}"
-print(f"\n✅ Verification passed: {authors[0]}")
+# -- Verify rows --------------------------------------------------------
+authors = state.session.query(Author).all()
+assert len(authors) == 2, f"Expected 2 authors, got {len(authors)}"
+books = state.session.query(Book).all()
+assert len(books) == 4, f"Expected 4 books, got {len(books)}"
+print(f"\n✅ Verification passed: {len(authors)} authors, {len(books)} books")
 
-# -- Turn 2: ask a query ------------------------------------------------
+# -- Turn 2: ask the model to use the tool ------------------------------
+
 print("\n" + "=" * 60)
-print("TURN 2 — Query authors")
+print("TURN 2 — Use format_catalog tool")
 print("=" * 60)
-state.messages.append(UserMessage("List all authors in the database."))
-gen = run(state=state, base=Base, model=MODEL)
+state.messages.append(UserMessage("use the tool to get me the catalog from almudena"))
+gen = run(state=state, base=Base, model=MODEL, tools=[get_author_catalog])
 try:
     while True:
         event = next(gen)

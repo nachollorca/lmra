@@ -1,7 +1,7 @@
 """Database viewer page — shows tables marked with __show__ = True."""
 
 import streamlit as st
-from base import Base
+from fixtures import Base
 
 st.header(":material/database: Database Viewer")
 
