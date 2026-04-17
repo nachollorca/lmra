@@ -1,7 +1,7 @@
 """Chat page — talk to the lmra agent with live signal feedback."""
 
 import streamlit as st
-from base import Base
+from fixtures import Base
 from lmdk import AssistantMessage, UserMessage
 
 from lmra.agent import Output, Signal, run
@@ -29,6 +29,7 @@ st.header(":material/chat: Chat")
 chat_log: list[dict] = st.session_state.chat_log
 state = st.session_state.state
 model = st.session_state.model
+tools = st.session_state.tools
 
 for entry in chat_log:
     st.chat_message(entry["kind"], avatar=AVATARS.get(entry["kind"])).markdown(entry["text"])
@@ -40,7 +41,7 @@ if prompt := st.chat_input("Message the agent…"):
     status = st.empty()
     status.info(":material/lightbulb: Thinking…")
 
-    gen = run(state=state, base=Base, model=model)
+    gen = run(state=state, base=Base, model=model, tools=st.session_state.tools)
     try:
         while True:
             event = next(gen)

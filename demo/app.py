@@ -1,7 +1,7 @@
 """Entry point: navigation, sidebar, session_state init."""
 
 import streamlit as st
-from base import Base
+from fixtures import Base, get_author_catalog
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
@@ -28,6 +28,7 @@ if "state" not in st.session_state:
     Base.metadata.create_all(engine)
     state = State(session=Session(engine))
     st.session_state.state = state
+    st.session_state.tools = [get_author_catalog]
 
 if "chat_log" not in st.session_state:
     st.session_state.chat_log = []

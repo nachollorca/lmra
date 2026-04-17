@@ -1,7 +1,9 @@
-"""Dummy declarative base with two related tables for demo/testing purposes."""
+"""Dummy schema and a tool for demo/testing purposes."""
 
 from sqlalchemy import ForeignKey, String
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, relationship
+
+from lmra.tools import tool
 
 
 class Base(DeclarativeBase):
@@ -31,3 +33,17 @@ class Book(Base):
     author_id: Mapped[int] = mapped_column(ForeignKey("authors.id"))
 
     author: Mapped["Author"] = relationship(back_populates="books")
+
+
+@tool
+def get_author_catalog(author: str, session: Session) -> list[str]:
+    """Dummy tool that simply lists all the the book titles for an author.
+
+    Args:
+        author: the name of the author for which to output the books
+        session: the database connection
+    """
+    author_obj = session.query(Author).filter(Author.name == author).first()
+    if not author_obj:
+        return []
+    return [book.title for book in author_obj.books]
