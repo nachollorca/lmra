@@ -2,7 +2,7 @@
 
 import inspect
 from dataclasses import dataclass
-from typing import Any, Callable, Protocol, cast
+from typing import Any, Callable, Protocol
 
 
 class HasMetadata(Protocol):
@@ -31,8 +31,6 @@ class Tool:
     @classmethod
     def from_function(cls, fn: Any) -> "Tool":
         """Build a ``Tool`` from a plain function."""
-        # We use Any for fn to avoid complex Protocol issues with Callables,
-        # but we know it should have __name__ if it's a function.
         name = getattr(fn, "__name__", "unknown")
         doc = inspect.cleandoc(getattr(fn, "__doc__", "") or "")
         short = doc.split("\n", 1)[0] if doc else ""
