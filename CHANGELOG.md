@@ -2,6 +2,30 @@
 
 <!-- version list -->
 
+## v1.3.0 (2026-04-17)
+
+### Code Style
+
+- Make the `disclose` function output stuff in actual proper python format
+  ([`1c18157`](https://github.com/nachollorca/lmra/commit/1c181576878ad600cbb5b077ec50af5a3a510af5))
+
+### Documentation
+
+- Add comment for the tool.fn explanation and remove unused import
+  ([`59537b6`](https://github.com/nachollorca/lmra/commit/59537b6534116e1a2c21c86c774f2fce1744978d))
+
+- Fix how the references look in readme
+  ([`23e7060`](https://github.com/nachollorca/lmra/commit/23e706021756bf523713f559b194e1094f4c4d85))
+
+- Make readme cool
+  ([`d765cf5`](https://github.com/nachollorca/lmra/commit/d765cf55e8ee38c589ba9e1e3f73ac468aa98566))
+
+### Features
+
+- Add tools to the demo
+  ([`e288158`](https://github.com/nachollorca/lmra/commit/e288158928cf40aa26ed69c9cd615a920224cbbc))
+
+
 ## v1.2.0 (2026-04-16)
 
 ### Continuous Integration
