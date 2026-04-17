@@ -1,8 +1,8 @@
-# lmra
+# llmalchemy
 
 Every new operation you want to allow a user to perform on your application's data model means new logic, a new screen. Feature development is the bottleneck: translating between what the user would like to do and the rigid paths your code allows.
 
-`lmra` removes that layer. Hand an LM your ORM schema — the one you already have — and a sandboxed Python environment. It composes its own queries and transformations as code in a single turn. You do not need to define a thousand brittle GUIs for each possible action, nor a comprehensive but discrete set of tools for the LM to leverage. Users describe what they want from the application with natural language; the agent figures out how to make it happen.
+`llmalchemy` removes that layer. Hand an LM your ORM schema — the one you already have — and a sandboxed Python environment. It composes its own queries and transformations as code in a single turn. You do not need to define a thousand brittle GUIs for each possible action, nor a comprehensive but discrete set of tools for the LM to leverage. Users describe what they want from the application with natural language; the agent figures out how to make it happen.
 
 ---
 
@@ -24,7 +24,7 @@ But code execution alone doesn't solve the data access problem. The LM still nee
 
 And it does. Relational algebra is a solved discipline: decades of refinement behind optimal ways of organizing and querying structured data. SQL databases implement it. ORMs like SQLAlchemy wrap it in the same Python the LM is already writing.
 
-By placing an ORM session and the model classes in the agent's execution namespace, `lmra` gives the LM full, structured access to the data without a single hand-crafted tool. The developer defines the schema once — which they'd do anyway. The LM handles everything else.
+By placing an ORM session and the model classes in the agent's execution namespace, `llmalchemy` gives the LM full, structured access to the data without a single hand-crafted tool. The developer defines the schema once — which they'd do anyway. The LM handles everything else.
 
 ### What this means for applications
 
@@ -35,7 +35,7 @@ Traditional software requires two layers of work on top of the data model:
 
 Both layers grow with the complexity of the data model and the operations pipelines that we want to allow for the user.
 
-With `lmra`, the developer defines the schema and optionally a handful of tools for things that genuinely require custom logic (sending emails, calling external APIs, very complex workflows). Everything else — every query, every data transformation, every "find all X where Y and then update Z" — the LM composes on the fly.
+With `llmalchemy`, the developer defines the schema and optionally a handful of tools for things that genuinely require custom logic (sending emails, calling external APIs, very complex workflows). Everything else — every query, every data transformation, every "find all X where Y and then update Z" — the LM composes on the fly.
 
 For users, this replaces navigating menus and filling forms with describing what they want. It removes the mismatch between what the user is thinking and the rigid paths a GUI offers.
 
@@ -50,7 +50,7 @@ Application data is a different beast. Dozens of entity types, foreign keys, man
 ## Use
 
 ### Install
-`uv add lmra`
+`uv add llmalchemy`
 
 ### Usage
 [here some minimal example of how to set up the mandatory inputs (the declarative base...) and get the streamed events from the `agent.run` function.
@@ -74,7 +74,7 @@ In short: **chat → LM generates SQLAlchemy code → validate → execute → r
 
 ### Structure
 ```
-src/lmdk/
+src/llmalchemy/
 ├── agent.py      # Entrypoint for the agentic loop
 ├── code.py       # Sandboxed python env on which to run the agent requested code
 ├── context.py    # Utils to engineer the context passed to the agent

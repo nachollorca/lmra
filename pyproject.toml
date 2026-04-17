@@ -1,7 +1,7 @@
 [project]
-name = "lmra"
+name = "llmalchemy"
 version = "0.1.0"
-description = "Language Model Relational Agent"
+description = "A full-access agent pattern."
 requires-python = ">=3.13"
 license = { text = "MIT" }
 readme = "README.md"

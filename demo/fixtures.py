@@ -3,7 +3,7 @@
 from sqlalchemy import ForeignKey, String
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, relationship
 
-from lmra.tools import tool
+from llmalchemy.tools import tool
 
 
 class Base(DeclarativeBase):
