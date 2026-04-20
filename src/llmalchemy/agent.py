@@ -3,6 +3,7 @@
 from collections.abc import Generator, Iterator
 from dataclasses import dataclass, field
 from enum import StrEnum
+from pathlib import Path
 
 from lmdk import Message, UserMessage, complete
 from pydantic import BaseModel, Field
@@ -144,6 +145,7 @@ def run(
     model: str,
     tools: list[Tool] = [],
     allowed_imports: list[str] = [],
+    prompt_template: str | Path | None = None,
 ) -> Iterator[Event]:
     """Execute the agentic loop.
 
@@ -156,6 +158,17 @@ def run(
         model: Model identifier forwarded to ``complete()``.
         tools: User-provided tools the agent can call in generated code.
         allowed_imports: Any vanilla module or third-party package that the agent can use.
+        prompt_template: Custom system prompt. ``None`` uses the shipped default;
+            a ``Path`` is read and rendered as a Jinja template; a ``str`` is
+            rendered directly as a Jinja template. The template may reference
+            any subset of these variables:
+
+            - ``SCHEMA``: source code of ORM classes.
+            - ``SYMBOLS``: Markdown bullet list of pre-loaded namespace symbols.
+            - ``TOOLS``: Markdown bullet list of tool names + one-liners
+              (empty if no tools).
+
+            A ``LLMAlchemyPromptWarning`` is emitted for each missing variable.
 
     Yields:
         ``Event``: system instruction, loop signals, and conversation messages.
@@ -163,7 +176,9 @@ def run(
     _init_session(state, base)
     descriptions = _init_namespace(state, base, tools)
 
-    system_instruction = render(base=base, tools=tools, descriptions=descriptions)
+    system_instruction = render(
+        base=base, tools=tools, descriptions=descriptions, template=prompt_template
+    )
     yield SystemInstructionEvent(system_instruction)
 
     output = yield from _complete(state, model, system_instruction)

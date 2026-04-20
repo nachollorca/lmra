@@ -1,6 +1,8 @@
 """Contains the utils to engineer the context passed to the agent."""
 
 import inspect
+import re
+import warnings
 from pathlib import Path
 
 from lmdk import render_template
@@ -9,6 +11,12 @@ from sqlalchemy.orm import DeclarativeBase
 from .tools import Tool
 
 _TEMPLATE_PATH = Path(__file__).parent / "prompt.jinja"
+
+_REQUIRED_MARKERS = ("SCHEMA", "SYMBOLS", "TOOLS")
+
+
+class LLMAlchemyPromptWarning(UserWarning):
+    """Warning for prompt templates missing one of the documented Jinja variables."""
 
 
 def _render_schema_source(base: type[DeclarativeBase]) -> str:
@@ -23,38 +31,34 @@ def _render_schema_source(base: type[DeclarativeBase]) -> str:
 
 
 def _render_symbols(descriptions: dict[str, str]) -> str:
-    """Format the symbol descriptions dict as a Markdown bullet list.
-
-    Args:
-        descriptions: ``{name: description}`` as returned by ``_init_namespace``.
-
-    Returns:
-        A Markdown-formatted bullet list.
-    """
+    """Format the symbol descriptions dict as a Markdown bullet list."""
     return "\n".join(f"- `{name}`: {desc}" for name, desc in descriptions.items())
 
 
 def _render_tools_summary(tools: list[Tool]) -> str:
-    """Render name + one-liner for each tool.
-
-    This summary is shown in the system prompt.  The agent can call
-    ``disclose(name)`` to see full details.
-
-    Args:
-        tools: User-provided tools registered for this run.
-
-    Returns:
-        A Markdown-formatted bullet list, or empty string if no tools.
-    """
+    """Render name + one-liner for each tool (empty string if no tools)."""
     if not tools:
         return ""
     return "\n".join(f"- `{t.name}`: {t.short_description}" for t in tools)
+
+
+def _check_markers(source: str) -> None:
+    """Warn for each required Jinja variable missing from the raw template source."""
+    for marker in _REQUIRED_MARKERS:
+        if not re.search(r"\{\{\s*" + marker + r"\s*\}\}", source):
+            warnings.warn(
+                f"Prompt template is missing the `{{{{ {marker} }}}}` variable; "
+                "the agent may behave unpredictably.",
+                LLMAlchemyPromptWarning,
+                stacklevel=2,
+            )
 
 
 def render(
     base: type[DeclarativeBase],
     tools: list[Tool],
     descriptions: dict[str, str],
+    template: str | Path | None = None,
 ) -> str:
     """Build the system instruction for the LM with all context parts.
 
@@ -63,9 +67,26 @@ def render(
         tools: User-provided tools registered for this run.
         descriptions: ``{name: description}`` of every namespace symbol,
             as returned by ``_init_namespace`` in ``agent.py``.
+        template: A Jinja template source string, a ``Path`` to a template
+            file, or ``None`` to use the shipped default.
     """
+    if template is None:
+        path: Path = _TEMPLATE_PATH
+        source = path.read_text()
+        _check_markers(source)
+        return render_template(
+            template=source,
+            SCHEMA=_render_schema_source(base=base),
+            SYMBOLS=_render_symbols(descriptions),
+            TOOLS=_render_tools_summary(tools),
+        )
+    if isinstance(template, Path):
+        source = template.read_text()
+    else:
+        source = template
+    _check_markers(source)
     return render_template(
-        path=str(_TEMPLATE_PATH),
+        template=source,
         SCHEMA=_render_schema_source(base=base),
         SYMBOLS=_render_symbols(descriptions),
         TOOLS=_render_tools_summary(tools),
