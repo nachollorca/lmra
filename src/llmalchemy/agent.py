@@ -4,9 +4,10 @@ from collections.abc import Generator, Iterator
 from dataclasses import dataclass, field
 from enum import StrEnum
 from pathlib import Path
+from typing import Any, cast
 
 from lmdk import Message, UserMessage, complete
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, create_model
 from sqlalchemy import create_engine
 from sqlalchemy.orm import DeclarativeBase, Session
 
@@ -78,6 +79,7 @@ def _complete(
     state: State,
     model: str,
     system_instruction: str,
+    output_schema: type[Output],
 ) -> Generator[Event, None, Output]:
     """Single LM call: append the response, yield signals and the message, return parsed output."""
     yield SignalEvent(Signal.COMPLETION)
@@ -85,11 +87,39 @@ def _complete(
         model=model,
         prompt=state.messages,
         system_instruction=system_instruction,
-        output_schema=Output,
+        output_schema=output_schema,
     )
     state.messages.append(response.message)
     yield MessageEvent(response.message)
+    assert isinstance(response.output, Output)
     return response.output  # noqa: B901 — consumed via yield-from
+
+
+def _build_output_schema(output_extensions: type[BaseModel] | None) -> type[Output]:
+    """Build the structured-output schema used by the agent loop.
+
+    When ``output_extensions`` is ``None``, the plain :class:`Output` model is
+    returned. Otherwise, a dynamic subclass is created whose fields are the
+    extension fields followed by ``message`` and ``code`` (in that order).
+
+    Ordering matters: fields emitted earlier in the structured output act as a
+    scratchpad for later fields (this is how chain-of-thought-in-schema works).
+    Typical uses are reasoning slots (e.g. ``thoughts: str`` or ARQ-style
+    ``user_intent`` / ``info_needed`` / ``info_missing``) and product fields
+    (``confidence``, ``citations``, ``suggested_followups``, …). The agent loop
+    only reads ``.message`` and ``.code``; extra fields ride along on the
+    yielded message object for the caller to consume.
+    """
+    if output_extensions is None:
+        return Output
+
+    extension_fields = {
+        name: (f.annotation, f) for name, f in output_extensions.model_fields.items()
+    }
+    base_fields = {name: (f.annotation, f) for name, f in Output.model_fields.items()}
+    # ``create_model``'s overloads don't accept ``**kwargs`` unpacking, so we
+    # cast to ``Any`` to silence the type checker without a per-call pragma.
+    return cast(Any, create_model)("Output", **extension_fields, **base_fields)
 
 
 def _init_session(state: State, base: type[DeclarativeBase]) -> None:
@@ -143,9 +173,11 @@ def run(
     state: State,
     base: type[DeclarativeBase],
     model: str,
-    tools: list[Tool] = [],
-    allowed_imports: list[str] = [],
+    tools: list[Tool] | None = None,
+    allowed_imports: list[str] | None = None,
     prompt_template: str | Path | None = None,
+    output_extensions: type[BaseModel] | None = None,
+    thinking: bool = False,
 ) -> Iterator[Event]:
     """Execute the agentic loop.
 
@@ -158,32 +190,33 @@ def run(
         model: Model identifier forwarded to ``complete()``.
         tools: User-provided tools the agent can call in generated code.
         allowed_imports: Any vanilla module or third-party package that the agent can use.
-        prompt_template: Custom system prompt. ``None`` uses the shipped default;
-            a ``Path`` is read and rendered as a Jinja template; a ``str`` is
-            rendered directly as a Jinja template. The template may reference
-            any subset of these variables:
-
-            - ``SCHEMA``: source code of ORM classes.
-            - ``SYMBOLS``: Markdown bullet list of pre-loaded namespace symbols.
-            - ``TOOLS``: Markdown bullet list of tool names + one-liners
-              (empty if no tools).
-
-            A ``LLMAlchemyPromptWarning`` is emitted for each missing variable.
+        output_extensions: Optional Pydantic model to force in the LM structured output.
+        thinking: Level of thinking for provider-native reasoning tokens. Not implemented yet.
+        prompt_template: Custom jinja system prompt. Should contain placeholders for:
+            - ``SCHEMA``: used to show agent the source code of ORM classes
+            - ``SYMBOLS``: used to show ageent all pre-loaded namespace symbols.
+            - ``TOOLS``: usedf to show the agent tool names + short descriptions.
 
     Yields:
         ``Event``: system instruction, loop signals, and conversation messages.
     """
+    if thinking:
+        raise NotImplementedError("Native provider thinking is not yet wired through lmdk.")
+
+    # Initialize everything
+    tools = tools or []
+    allowed_imports = allowed_imports or []
+    output_schema = _build_output_schema(output_extensions)
     _init_session(state, base)
     descriptions = _init_namespace(state, base, tools)
-
-    system_instruction = render(
-        base=base, tools=tools, descriptions=descriptions, template=prompt_template
-    )
+    system_instruction = render(base, tools, descriptions, prompt_template)
     yield SystemInstructionEvent(system_instruction)
 
-    output = yield from _complete(state, model, system_instruction)
+    # First call to the model
+    output = yield from _complete(state, model, system_instruction, output_schema)
     code = output.code
 
+    # Loop until model is over with the task
     loops = 0
     while code:
         if loops >= MAX_LOOPS:
@@ -196,7 +229,7 @@ def run(
             message = UserMessage(f"Code rejected: {reason}")
             state.messages.append(message)
             yield MessageEvent(message)
-            output = yield from _complete(state, model, system_instruction)
+            output = yield from _complete(state, model, system_instruction, output_schema)
             code = output.code
             continue
 
@@ -205,5 +238,5 @@ def run(
         message = UserMessage(f"Execution result:\n{result}")
         state.messages.append(message)
         yield MessageEvent(message)
-        output = yield from _complete(state, model, system_instruction)
+        output = yield from _complete(state, model, system_instruction, output_schema)
         code = output.code
