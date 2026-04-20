@@ -54,7 +54,7 @@ if prompt := st.chat_input("Message the agent…"):
                 status.info(SIGNAL_LABELS[signal])
 
             case SystemInstructionEvent():
-                pass  # logged but not displayed in chat
+                st.session_state.system_instruction = event.content
 
             case MessageEvent(message=msg) if isinstance(msg, AssistantMessage):
                 output = Output.model_validate_json(msg.content)
