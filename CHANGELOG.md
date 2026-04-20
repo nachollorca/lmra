@@ -2,6 +2,33 @@
 
 <!-- version list -->
 
+## v1.4.0 (2026-04-20)
+
+### Chores
+
+- Ignore things I use for the agents
+  ([`2ddf9db`](https://github.com/nachollorca/llmalchemy/commit/2ddf9dbbfd1f9e4a6b925f83dd67896de254e2df))
+
+### Features
+
+- Allow for custom structured outputs
+  ([`4e2e140`](https://github.com/nachollorca/llmalchemy/commit/4e2e140b8def5c35c565b050d2677c36e69bd870))
+
+- Allow users to modify the prompt
+  ([`870aa84`](https://github.com/nachollorca/llmalchemy/commit/870aa84a2c837dc22a13f0cb70658a5d90c78412))
+
+- Handle the system prompt in the demo
+  ([`e656e43`](https://github.com/nachollorca/llmalchemy/commit/e656e436bc3480dbdeb7aafaa0737b75e2b2f7f1))
+
+- Replace Generator with Iterator
+  ([`187976d`](https://github.com/nachollorca/llmalchemy/commit/187976dc9024206549a8e45a5dccfc65b7f1a62f))
+
+### Performance Improvements
+
+- Print just one line for all tables in the system prompt
+  ([`1ba3b37`](https://github.com/nachollorca/llmalchemy/commit/1ba3b374cd02dd5631f8056223bc0a862950dce2))
+
+
 ## v1.3.0 (2026-04-17)
 
 ### Code Style
