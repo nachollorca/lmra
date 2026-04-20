@@ -1,47 +1,17 @@
-"""Dummy schema and a tool for demo/testing purposes."""
+"""Re-export of the shared test fixtures schema so demo scripts keep working.
 
-from sqlalchemy import ForeignKey, String
-from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, relationship
+The source of truth is ``tests/fixtures/schema.py``. Demo scripts typically
+run from the ``demo/`` directory (``python test.py``), so we make sure the
+project root is on ``sys.path`` before importing.
+"""
 
-from llmalchemy.tools import tool
+import sys
+from pathlib import Path
 
+_ROOT = Path(__file__).resolve().parent.parent
+if str(_ROOT) not in sys.path:
+    sys.path.insert(0, str(_ROOT))
 
-class Base(DeclarativeBase):
-    """Shared declarative base."""
+from tests.fixtures.schema import Author, Base, Book, get_author_catalog  # noqa: E402
 
-
-class Author(Base):
-    """An author who can write many books."""
-
-    __tablename__ = "authors"
-
-    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    name: Mapped[str] = mapped_column(String(120))
-
-    books: Mapped[list["Book"]] = relationship(back_populates="author")
-
-
-class Book(Base):
-    """A book belonging to a single author."""
-
-    __tablename__ = "books"
-
-    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    title: Mapped[str] = mapped_column(String(200))
-    author_id: Mapped[int] = mapped_column(ForeignKey("authors.id"))
-
-    author: Mapped["Author"] = relationship(back_populates="books")
-
-
-@tool
-def get_author_catalog(author: str, session: Session) -> list[str]:
-    """Dummy tool that simply lists all the the book titles for an author.
-
-    Args:
-        author: the name of the author for which to output the books
-        session: the database connection
-    """
-    author_obj = session.query(Author).filter(Author.name == author).first()
-    if not author_obj:
-        return []
-    return [book.title for book in author_obj.books]
+__all__ = ["Author", "Base", "Book", "get_author_catalog"]

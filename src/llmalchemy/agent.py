@@ -1,5 +1,6 @@
 """Contains the agentic loop and related utils."""
 
+import weakref
 from collections.abc import Generator, Iterator
 from dataclasses import dataclass, field
 from enum import StrEnum
@@ -128,6 +129,9 @@ def _init_session(state: State, base: type[DeclarativeBase]) -> None:
         engine = create_engine("sqlite://")
         base.metadata.create_all(engine)
         state.session = Session(engine)
+        # Dispose the engine (and close its pooled sqlite3.Connection) when
+        # the session is garbage-collected, to avoid ResourceWarnings.
+        weakref.finalize(state.session, engine.dispose)
 
 
 def _init_namespace(
