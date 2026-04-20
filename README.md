@@ -6,6 +6,8 @@ Every new operation you want to allow a user to perform on your application's da
 
 In short: **user input → LM generates SQLAlchemy code → validate → execute → return results to LM → repeat until done**.
 
+See the complete motivation in **[Whitepaper](#whitepaper-why-llmalchemy)**
+
 ## Usage
 
 `uv add llmalchemy`, or use your favorite package manager (that should really be `uv` as of 2026).
@@ -44,9 +46,7 @@ class Book(Base):
 model = "vertex:gemini-3-flash-preview"
 ```
 
-<details>
-<summary>Minimal run</summary>
-Append the first message to the conversation and simply iterate over the `run` call.
+For the minimal run, append the first message to the conversation and simply iterate over the `run` call.
 You will recieve `Events` with the messages and code results performed by the agent, together with precise signals indicating the agents loop state (waiting for the LM completion, executing code, etc.):
 
 ```python
@@ -58,7 +58,6 @@ for event in run(state=state, base=Base, model=model):
 ```
 
 The `state` presists across calls, just append a new UserMessage and call run() again to continue the conversation.
-</details>
 
 <details>
 <summary>Handling events</summary>
