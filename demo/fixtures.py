@@ -14,7 +14,6 @@ class Author(Base):
     """An author who can write many books."""
 
     __tablename__ = "authors"
-    __show__ = True
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(String(120))
@@ -26,7 +25,6 @@ class Book(Base):
     """A book belonging to a single author."""
 
     __tablename__ = "books"
-    __show__ = True
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     title: Mapped[str] = mapped_column(String(200))
