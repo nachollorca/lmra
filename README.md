@@ -4,7 +4,8 @@ Every new operation you want to allow a user to perform on your application's da
 
 `llmalchemy` removes that layer. Hand an LM your ORM schema and a sandboxed Python environment. It composes its own queries and transformations as code in a single turn. You do not need to define a thousand brittle GUIs for each possible action, nor a comprehensive but discrete set of tools for the LM to leverage. Users describe what they want from the application with natural language; the agent figures out how to make it happen.
 
-## Whitepaper
+<details>
+    <summary>Whitepaper</summary>
 
 ### Tool calling hits a wall
 
@@ -42,14 +43,16 @@ For users, this replaces navigating menus and filling forms with describing what
 Today's coding agents (Opencode, Pi, Claude Code) prove that LMs can navigate file structures effectively with tools as simple as `bash`, `read`, `write` and `edit`. But file systems are structurally simple: trees of named nodes with blob contents.
 
 Application data is a different beast. Dozens of entity types, foreign keys, many-to-many relationships, constraints, cascading dependencies. Relational data is orders of magnitude richer than a directory tree. The ORM gives the LM the right abstraction: it thinks in terms of entities, relationships and queries rather than raw files.
+</details>
 
-## Use
+## Usage
 
 ### Install
 `uv add llmalchemy`
 
-### Usage
+### How to use
 
+The only thing you need to define upfront is your database schema through an sqlalchemy declarative base:
 ```python
 from llmalchemy.agent import State, run
 from lmdk import UserMessage
@@ -58,31 +61,69 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 class Base(DeclarativeBase): ...
 
 class Author(Base):
+    """An author who can write many books."""
+
     __tablename__ = "authors"
-    __show__ = True  # expose this class to the agent
+
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    name: Mapped[str] = mapped_column()
+    name: Mapped[str] = mapped_column(String(120))
+
+    books: Mapped[list["Book"]] = relationship(back_populates="author")
+
+
+class Book(Base):
+    """A book belonging to a single author."""
+
+    __tablename__ = "books"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    title: Mapped[str] = mapped_column(String(200))
+    author_id: Mapped[int] = mapped_column(ForeignKey("authors.id"))
+
+    author: Mapped["Author"] = relationship(back_populates="books")
+
 
 model = "vertex:gemini-3-flash-preview"
 ```
 
 <details>
 <summary>Minimal run</summary>
+Append the first message to the conversation and simply iterate over the `run` call.
+You will recieve `Events` with the messages and code results performed by the agent, together with precise signals indicating the agents loop state (waiting for the LM completion, executing code, etc.):
 
 ```python
 state = State()
-state.messages.append(UserMessage("Add authors Alice and Bob."))
+state.messages.append(UserMessage("Add authors Tolkien and Dhalia de la Cerda, and two books for each."))
 
 for event in run(state=state, base=Base, model=model):
     print(event)
+```
 
-# state.session, state.messages and state.namespace persist across calls —
-# append a new UserMessage and call run() again to continue the conversation.
+The `state` presists across calls, just append a new UserMessage and call run() again to continue the conversation.
+</details>
+
+<details>
+<summary>Handling events</summary>
+Typically, you would want to consume the streamed events as the agent operates like this:
+
+```python
+from llmalchemy.agent import MessageEvent, SignalEvent, SystemInstructionEvent
+
+for event in run(state=state, base=Base, model=model):
+    match event:
+        case SystemInstructionEvent(content=s):
+            ...  # shown once at the start of the loop
+        case SignalEvent(signal=sig):
+            ...  # COMPLETION | VALIDATION | EXECUTION | EXCEEDED
+        case MessageEvent(message=msg):
+            ...  # every message appended to state.messages
 ```
 </details>
 
 <details>
 <summary>Custom tools</summary>
+You can define any pre-built function that you want the agent to have access to.
+These can modify the database or do something completely different, like performing math operations or calling another API.
 
 ```python
 from sqlalchemy.orm import Session
@@ -94,6 +135,7 @@ def get_author_catalog(author: str, session: Session) -> list[str]:
     obj = session.query(Author).filter(Author.name == author).first()
     return [b.title for b in obj.books] if obj else []
 
+state.messages.append(UserMessage("whats the catalog for Dhalia de la Cerda?"))
 for event in run(state=state, base=Base, model=model, tools=[get_author_catalog]):
     print(event)
 ```
@@ -104,26 +146,23 @@ The agent calls `disclose("get_author_catalog")` to inspect the full signature o
 
 <details>
 <summary>Allowed imports</summary>
+For safety, no imports are allowed inside agent-generated code.
+Whitelist any stdlib or third-party module the agent may need.
 
 ```python
-# By default, no imports are allowed inside agent-generated code.
-# Whitelist any stdlib or third-party module the agent may need:
-for event in run(
-    state=state,
-    base=Base,
-    model=model,
-    allowed_imports=["statistics", "datetime"],
-):
+state.messages.append(UserMessage("what day is today?"))
+for event in run( state=state, base=Base, model=model, allowed_imports=["datetime"]):
     print(event)
 ```
 </details>
 
 <details>
 <summary>Custom system prompt</summary>
+You can pass a Jinja template to override the [default one](src/llmalchemy/prompt.jinja).
+It is recommended that the template contains vars {{ SCHEMA }}, {{ SYMBOLS }} and {{ TOOLS }}.
 
 ```python
-# Pass a Jinja template string or path. It must render the placeholders
-# {{ SCHEMA }}, {{ SYMBOLS }} and {{ TOOLS }}.
+prompt = """Write python code to answer user requests. You have access to {{ SCHEMA }}, {{ SYMBOLS }} and {{ TOOLS }}"""
 for event in run(
     state=state,
     base=Base,
@@ -135,7 +174,9 @@ for event in run(
 </details>
 
 <details>
-<summary>Output extensions (chain-of-thought in schema)</summary>
+<summary>Output extensions</summary>
+By default, the agent responds with a `message` for the user and optional `code` to perform actions.
+You can specify any additional fields for the LM to fill.
 
 ```python
 from pydantic import BaseModel, Field
@@ -152,23 +193,6 @@ for event in run(
 ):
     print(event)
 # Extra fields ride along on the yielded AssistantMessage for you to consume.
-```
-</details>
-
-<details>
-<summary>Handling events</summary>
-
-```python
-from llmalchemy.agent import MessageEvent, SignalEvent, SystemInstructionEvent
-
-for event in run(state=state, base=Base, model=model):
-    match event:
-        case SystemInstructionEvent(content=s):
-            ...  # shown once at the start of the loop
-        case SignalEvent(signal=sig):
-            ...  # COMPLETION | VALIDATION | EXECUTION | EXCEEDED
-        case MessageEvent(message=msg):
-            ...  # every message appended to state.messages
 ```
 </details>
 
@@ -208,8 +232,6 @@ We use `just` for development tasks. Use:
 1. **Hooks**: Install pre-commit hooks via `just install-hooks`. PRs will fail CI if linting/formatting is not applied.
 2. **Issues**: Open an issue first using the default template.
 3. **PRs**: Link your PR to the relevant issue using the PR template.
-
----
 
 ## License
 MIT
