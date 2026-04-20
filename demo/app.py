@@ -49,6 +49,15 @@ with st.sidebar:
         st.session_state.chat_log.clear()
         st.rerun()
 
+    if "system_instruction" in st.session_state:
+
+        @st.dialog("System Instruction", width="large")
+        def _show_system_instruction():
+            st.write(st.session_state.system_instruction)
+
+        if st.button("System Instruction", use_container_width=True):
+            _show_system_instruction()
+
 # ── Navigation ──────────────────────────────────────────────────────────────
 
 chat_page = st.Page("chat.py", title="Chat", icon=":material/chat:", default=True)

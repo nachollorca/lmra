@@ -131,3 +131,8 @@ gcp_credentials.json
 
 # complexipy
 .complexipy*
+
+# prompts, plans and other stuff for agents
+*.prompt
+PLAN.md
+TODO.md

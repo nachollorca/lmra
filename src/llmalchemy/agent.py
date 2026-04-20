@@ -1,11 +1,13 @@
 """Contains the agentic loop and related utils."""
 
+from collections.abc import Generator, Iterator
 from dataclasses import dataclass, field
 from enum import StrEnum
-from typing import Generator, TypeAlias
+from pathlib import Path
+from typing import Any, cast
 
 from lmdk import Message, UserMessage, complete
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, create_model
 from sqlalchemy import create_engine
 from sqlalchemy.orm import DeclarativeBase, Session
 
@@ -47,25 +49,77 @@ class Signal(StrEnum):
     EXCEEDED = "EXCEEDED"
 
 
-Event: TypeAlias = Signal | Message
+@dataclass(frozen=True)
+class Event:
+    """Base class for all events yielded by the agentic loop."""
+
+
+@dataclass(frozen=True)
+class SignalEvent(Event):
+    """A control-flow signal indicating the current stage."""
+
+    signal: Signal
+
+
+@dataclass(frozen=True)
+class MessageEvent(Event):
+    """A message appended to the conversation history."""
+
+    message: Message
+
+
+@dataclass(frozen=True)
+class SystemInstructionEvent(Event):
+    """The system instruction sent to the model."""
+
+    content: str
 
 
 def _complete(
     state: State,
     model: str,
     system_instruction: str,
+    output_schema: type[Output],
 ) -> Generator[Event, None, Output]:
     """Single LM call: append the response, yield signals and the message, return parsed output."""
-    yield Signal.COMPLETION
+    yield SignalEvent(Signal.COMPLETION)
     response = complete(
         model=model,
         prompt=state.messages,
         system_instruction=system_instruction,
-        output_schema=Output,
+        output_schema=output_schema,
     )
     state.messages.append(response.message)
-    yield response.message
-    return response.output
+    yield MessageEvent(response.message)
+    assert isinstance(response.output, Output)
+    return response.output  # noqa: B901 — consumed via yield-from
+
+
+def _build_output_schema(output_extensions: type[BaseModel] | None) -> type[Output]:
+    """Build the structured-output schema used by the agent loop.
+
+    When ``output_extensions`` is ``None``, the plain :class:`Output` model is
+    returned. Otherwise, a dynamic subclass is created whose fields are the
+    extension fields followed by ``message`` and ``code`` (in that order).
+
+    Ordering matters: fields emitted earlier in the structured output act as a
+    scratchpad for later fields (this is how chain-of-thought-in-schema works).
+    Typical uses are reasoning slots (e.g. ``thoughts: str`` or ARQ-style
+    ``user_intent`` / ``info_needed`` / ``info_missing``) and product fields
+    (``confidence``, ``citations``, ``suggested_followups``, …). The agent loop
+    only reads ``.message`` and ``.code``; extra fields ride along on the
+    yielded message object for the caller to consume.
+    """
+    if output_extensions is None:
+        return Output
+
+    extension_fields = {
+        name: (f.annotation, f) for name, f in output_extensions.model_fields.items()
+    }
+    base_fields = {name: (f.annotation, f) for name, f in Output.model_fields.items()}
+    # ``create_model``'s overloads don't accept ``**kwargs`` unpacking, so we
+    # cast to ``Any`` to silence the type checker without a per-call pragma.
+    return cast(Any, create_model)("Output", **extension_fields, **base_fields)
 
 
 def _init_session(state: State, base: type[DeclarativeBase]) -> None:
@@ -98,9 +152,12 @@ def _init_namespace(
     state.namespace["session"] = state.session
     descriptions["session"] = "a `sqlalchemy.orm.Session` connected to the database."
 
-    for cls in base.__subclasses__():
+    orm_classes = base.__subclasses__()
+    for cls in orm_classes:
         state.namespace[cls.__name__] = cls
-        descriptions[cls.__name__] = "ORM model class (see schema above)."
+    if orm_classes:
+        names = ", ".join(cls.__name__ for cls in orm_classes)
+        descriptions[names] = "ORM model classes (see schema above)."
 
     for t in tools:
         state.namespace[t.name] = t.fn
@@ -119,9 +176,12 @@ def run(
     state: State,
     base: type[DeclarativeBase],
     model: str,
-    tools: list[Tool] = [],
-    allowed_imports: list[str] = [],
-) -> Generator[Event, None, State]:
+    tools: list[Tool] | None = None,
+    allowed_imports: list[str] | None = None,
+    prompt_template: str | Path | None = None,
+    output_extensions: type[BaseModel] | None = None,
+    thinking: bool = False,
+) -> Iterator[Event]:
     """Execute the agentic loop.
 
     An intermediate turn is one where the assistant message requests to run ``.code``.
@@ -133,43 +193,53 @@ def run(
         model: Model identifier forwarded to ``complete()``.
         tools: User-provided tools the agent can call in generated code.
         allowed_imports: Any vanilla module or third-party package that the agent can use.
+        output_extensions: Optional Pydantic model to force in the LM structured output.
+        thinking: Level of thinking for provider-native reasoning tokens. Not implemented yet.
+        prompt_template: Custom jinja system prompt. Should contain placeholders for:
+            - ``SCHEMA``: used to show agent the source code of ORM classes
+            - ``SYMBOLS``: used to show ageent all pre-loaded namespace symbols.
+            - ``TOOLS``: usedf to show the agent tool names + short descriptions.
 
     Yields:
-        ``Event``: every intermediate assistant message and loop signal.
-
-    Returns:
-        ``State``: possibly modified conversation, database snapshot and python namespace.
+        ``Event``: system instruction, loop signals, and conversation messages.
     """
+    if thinking:
+        raise NotImplementedError("Native provider thinking is not yet wired through lmdk.")
+
+    # Initialize everything
+    tools = tools or []
+    allowed_imports = allowed_imports or []
+    output_schema = _build_output_schema(output_extensions)
     _init_session(state, base)
     descriptions = _init_namespace(state, base, tools)
+    system_instruction = render(base, tools, descriptions, prompt_template)
+    yield SystemInstructionEvent(system_instruction)
 
-    system_instruction = render(base=base, tools=tools, descriptions=descriptions)
-
-    output = yield from _complete(state, model, system_instruction)
+    # First call to the model
+    output = yield from _complete(state, model, system_instruction, output_schema)
     code = output.code
 
+    # Loop until model is over with the task
     loops = 0
     while code:
         if loops >= MAX_LOOPS:
-            yield Signal.EXCEEDED
+            yield SignalEvent(Signal.EXCEEDED)
             break
         loops += 1
 
-        yield Signal.VALIDATION
+        yield SignalEvent(Signal.VALIDATION)
         if reason := validate(source=code, allowed_imports=allowed_imports):
             message = UserMessage(f"Code rejected: {reason}")
             state.messages.append(message)
-            yield message
-            output = yield from _complete(state, model, system_instruction)
+            yield MessageEvent(message)
+            output = yield from _complete(state, model, system_instruction, output_schema)
             code = output.code
             continue
 
-        yield Signal.EXECUTION
+        yield SignalEvent(Signal.EXECUTION)
         result = execute(source=code, namespace=state.namespace)
         message = UserMessage(f"Execution result:\n{result}")
         state.messages.append(message)
-        yield message
-        output = yield from _complete(state, model, system_instruction)
+        yield MessageEvent(message)
+        output = yield from _complete(state, model, system_instruction, output_schema)
         code = output.code
-
-    return state

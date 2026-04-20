@@ -17,13 +17,8 @@ print("=" * 60)
 state.messages.append(
     UserMessage("Make authors Almudena Grandes and Rosa Montero and two books for each")
 )
-gen = run(state=state, base=Base, model=MODEL, tools=[get_author_catalog])
-try:
-    while True:
-        event = next(gen)
-        print(event, "\n")
-except StopIteration as exc:
-    state = exc.value
+for event in run(state=state, base=Base, model=MODEL, tools=[get_author_catalog]):
+    print(event, "\n")
 
 # -- Verify rows --------------------------------------------------------
 authors = state.session.query(Author).all()
@@ -38,12 +33,7 @@ print("\n" + "=" * 60)
 print("TURN 2 — Use format_catalog tool")
 print("=" * 60)
 state.messages.append(UserMessage("use the tool to get me the catalog from almudena"))
-gen = run(state=state, base=Base, model=MODEL, tools=[get_author_catalog])
-try:
-    while True:
-        event = next(gen)
-        print(event, "\n")
-except StopIteration as exc:
-    state = exc.value
+for event in run(state=state, base=Base, model=MODEL, tools=[get_author_catalog]):
+    print(event, "\n")
 
 print("\n✅ Demo finished successfully.")
