@@ -1,5 +1,7 @@
 """Contains the utilities that access or modify the database."""
 
+import weakref
+
 from sqlalchemy import create_engine
 from sqlalchemy.orm import DeclarativeBase, Session
 
@@ -20,6 +22,9 @@ def deserialize(data: dict[str, list[dict]], base: type[DeclarativeBase]) -> Ses
     engine = create_engine("sqlite://")
     base.metadata.create_all(engine)
     session = Session(engine)
+    # Ensure the underlying sqlite3.Connection is closed when the session
+    # becomes unreachable, avoiding Python 3.13 ResourceWarnings.
+    weakref.finalize(session, engine.dispose)
 
     # Build a lookup from table name to mapped class
     cls_by_table: dict[str, type] = {}

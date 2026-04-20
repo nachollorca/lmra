@@ -2,11 +2,158 @@
 
 Every new operation you want to allow a user to perform on your application's data model means new logic, a new screen. Feature development is the bottleneck: translating between what the user would like to do and the rigid paths your code allows.
 
-`llmalchemy` removes that layer. Hand an LM your ORM schema — the one you already have — and a sandboxed Python environment. It composes its own queries and transformations as code in a single turn. You do not need to define a thousand brittle GUIs for each possible action, nor a comprehensive but discrete set of tools for the LM to leverage. Users describe what they want from the application with natural language; the agent figures out how to make it happen.
+`llmalchemy` removes that layer. Hand an LM your ORM schema and a sandboxed Python environment. It composes its own queries and transformations as code in a single turn. You do not need to define a thousand brittle GUIs for each possible action, nor a comprehensive but discrete set of tools for the LM to leverage. Users describe what they want from the application with natural language; the agent figures out how to make it happen.
 
----
+In short: **user input → LM generates SQLAlchemy code → validate → execute → return results to LM → repeat until done**.
 
-## Whitepaper
+See the complete motivation in **[Whitepaper](#whitepaper-why-llmalchemy)**
+
+## Usage
+
+`uv add llmalchemy`, or use your favorite package manager (that should really be `uv` as of 2026).
+
+The only thing you need to define upfront is your database schema through an sqlalchemy declarative base:
+```python
+from llmalchemy.agent import State, run
+from lmdk import UserMessage
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+
+class Base(DeclarativeBase): ...
+
+class Author(Base):
+    """An author who can write many books."""
+
+    __tablename__ = "authors"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(120))
+
+    books: Mapped[list["Book"]] = relationship(back_populates="author")
+
+
+class Book(Base):
+    """A book belonging to a single author."""
+
+    __tablename__ = "books"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    title: Mapped[str] = mapped_column(String(200))
+    author_id: Mapped[int] = mapped_column(ForeignKey("authors.id"))
+
+    author: Mapped["Author"] = relationship(back_populates="books")
+
+
+model = "vertex:gemini-3-flash-preview"
+```
+
+For the minimal run, append the first message to the conversation and simply iterate over the `run` call.
+You will recieve `Events` with the messages and code results performed by the agent, together with precise signals indicating the agents loop state (waiting for the LM completion, executing code, etc.):
+
+```python
+state = State()
+state.messages.append(UserMessage("Add authors Tolkien and Dhalia de la Cerda, and two books for each."))
+
+for event in run(state=state, base=Base, model=model):
+    print(event)
+```
+
+The `state` presists across calls, just append a new UserMessage and call run() again to continue the conversation.
+
+<details>
+<summary>Handling events</summary>
+Typically, you would want to consume the streamed events as the agent operates like this:
+
+```python
+from llmalchemy.agent import MessageEvent, SignalEvent, SystemInstructionEvent
+
+for event in run(state=state, base=Base, model=model):
+    match event:
+        case SystemInstructionEvent(content=s):
+            ...  # shown once at the start of the loop
+        case SignalEvent(signal=sig):
+            ...  # COMPLETION | VALIDATION | EXECUTION | EXCEEDED
+        case MessageEvent(message=msg):
+            ...  # every message appended to state.messages
+```
+</details>
+
+<details>
+<summary>Custom tools</summary>
+You can define any pre-built function that you want the agent to have access to.
+These can modify the database or do something completely different, like performing math operations or calling another API.
+
+```python
+from sqlalchemy.orm import Session
+from llmalchemy.tools import tool
+
+@tool
+def get_author_catalog(author: str, session: Session) -> list[str]:
+    """List all book titles for the given author."""
+    obj = session.query(Author).filter(Author.name == author).first()
+    return [b.title for b in obj.books] if obj else []
+
+state.messages.append(UserMessage("whats the catalog for Dhalia de la Cerda?"))
+for event in run(state=state, base=Base, model=model, tools=[get_author_catalog]):
+    print(event)
+```
+
+Only the tool name and first docstring line are shown to the agent up-front.
+The agent calls `disclose("get_author_catalog")` to inspect the full signature on demand.
+</details>
+
+<details>
+<summary>Allowed imports</summary>
+For safety, no imports are allowed inside agent-generated code.
+Whitelist any stdlib or third-party module the agent may need.
+
+```python
+state.messages.append(UserMessage("what day is today?"))
+for event in run( state=state, base=Base, model=model, allowed_imports=["datetime"]):
+    print(event)
+```
+</details>
+
+<details>
+<summary>Custom system prompt</summary>
+You can pass a Jinja template to override the [default one](src/llmalchemy/prompt.jinja).
+It is recommended that the template contains vars {{ SCHEMA }}, {{ SYMBOLS }} and {{ TOOLS }}.
+
+```python
+prompt = """Write python code to answer user requests. You have access to {{ SCHEMA }}, {{ SYMBOLS }} and {{ TOOLS }}"""
+for event in run(
+    state=state,
+    base=Base,
+    model=model,
+    prompt_template="path/to/prompt.jinja",
+):
+    print(event)
+```
+</details>
+
+<details>
+<summary>Output extensions</summary>
+By default, the agent responds with a `message` for the user and optional `code` to perform actions.
+You can specify any additional fields for the LM to fill.
+
+```python
+from pydantic import BaseModel, Field
+
+class Reasoning(BaseModel):
+    thoughts: str = Field(description="Scratchpad before answering.")
+    confidence: float = Field(description="0..1 confidence score.")
+
+for event in run(
+    state=state,
+    base=Base,
+    model=model,
+    output_extensions=Reasoning,
+):
+    print(event)
+# Extra fields ride along on the yielded AssistantMessage for you to consume.
+```
+</details>
+
+## Whitepaper (why `llmalchemy`)
 
 ### Tool calling hits a wall
 
@@ -16,7 +163,7 @@ Real applications have complex data models. To give the LM meaningful access you
 
 ### Code as the action space
 
-Research shows that letting LMs write and execute code instead of picking from a discrete set of tools produces stronger agents[[1](https://arxiv.org/abs/2402.01030)][[2](https://arxiv.org/pdf/2401.00812)][[3](https://arxiv.org/pdf/2411.01747)]. Code gives the model composition (chain operations in one turn), control flow (loops, conditionals, error handling), and self-extension (define helper functions that persist in the namespace). A single code block can do what would otherwise take a long chain of tool calls.
+Research shows that letting LMs write and execute code instead of picking from a discrete set of tools produces stronger agents[[1](https://arxiv.org/abs/2402.01030)][[2](https://arxiv.org/pdf/2401.00812)][[3](https://arxiv.org/pdf/2411.01747)][[4](https://platform.claude.com/docs/en/agents-and-tools/tool-use/programmatic-tool-calling)][[5](https://blog.cloudflare.com/code-mode/)]. Code gives the model composition (chain operations in one turn), control flow (loops, conditionals, error handling), and self-extension (define helper functions that persist in the namespace). A single code block can do what would otherwise take a long chain of tool calls.
 
 But code execution alone doesn't solve the data access problem. The LM still needs some interface to read and modify application state. You're back to writing wrapper functions — unless the right abstraction already exists.
 
@@ -45,31 +192,6 @@ Today's coding agents (Opencode, Pi, Claude Code) prove that LMs can navigate fi
 
 Application data is a different beast. Dozens of entity types, foreign keys, many-to-many relationships, constraints, cascading dependencies. Relational data is orders of magnitude richer than a directory tree. The ORM gives the LM the right abstraction: it thinks in terms of entities, relationships and queries rather than raw files.
 
----
-
-## Use
-
-### Install
-`uv add llmalchemy`
-
-### Usage
-[here some minimal example of how to set up the mandatory inputs (the declarative base...) and get the streamed events from the `agent.run` function.
-We could include some expanders as in `lmdk/README.md` for examples of other moving parts at the discretion of the user]
-...
-
-### How it works
-In short: **chat → LM generates SQLAlchemy code → validate → execute → return results → repeat until done**.
-
-1. **Schema as context** (`context.py`): The source code of your ORM classes is extracted via `inspect.getsource` and rendered into a Jinja system prompt alongside available symbols and tools.
-
-2. **Agentic loop** (`agent.py`): The LM produces structured output — a message and optional Python code. If code is present, it's validated, executed, and the result is fed back as a user message. The loop continues until the LM responds without code or hits 20 iterations.
-
-3. **Sandboxed execution** (`code.py`): An AST pass blocks dangerous builtins (`exec`, `eval`, `open`…), forbidden modules (`os`, `subprocess`…), dangerous dunder access, and enforces an import whitelist. Safe code runs in a persistent namespace with stdout captured.
-
-4. **Optional tools** (`tools.py`): Developers can register custom functions with the `@tool` decorator. Only tool names and one-liners appear in the prompt — the LM calls `disclose(name)` to see full signatures on demand, keeping the context window lean.
-
----
-
 ## Development
 
 ### Structure
@@ -95,8 +217,6 @@ We use `just` for development tasks. Use:
 1. **Hooks**: Install pre-commit hooks via `just install-hooks`. PRs will fail CI if linting/formatting is not applied.
 2. **Issues**: Open an issue first using the default template.
 3. **PRs**: Link your PR to the relevant issue using the PR template.
-
----
 
 ## License
 MIT
