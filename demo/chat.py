@@ -4,7 +4,14 @@ import streamlit as st
 from fixtures import Base
 from lmdk import AssistantMessage, UserMessage
 
-from llmalchemy.agent import Output, Signal, run
+from llmalchemy.agent import (
+    MessageEvent,
+    Output,
+    Signal,
+    SignalEvent,
+    SystemInstructionEvent,
+    run,
+)
 
 SIGNAL_LABELS = {
     Signal.COMPLETION: ":material/lightbulb: Thinking…",
@@ -41,16 +48,16 @@ if prompt := st.chat_input("Message the agent…"):
     status = st.empty()
     status.info(":material/lightbulb: Thinking…")
 
-    gen = run(state=state, base=Base, model=model, tools=st.session_state.tools)
-    try:
-        while True:
-            event = next(gen)
+    for event in run(state=state, base=Base, model=model, tools=st.session_state.tools):
+        match event:
+            case SignalEvent(signal=signal):
+                status.info(SIGNAL_LABELS[signal])
 
-            if isinstance(event, Signal):
-                status.info(SIGNAL_LABELS[event])
+            case SystemInstructionEvent():
+                pass  # logged but not displayed in chat
 
-            elif isinstance(event, AssistantMessage):
-                output = Output.model_validate_json(event.content)
+            case MessageEvent(message=msg) if isinstance(msg, AssistantMessage):
+                output = Output.model_validate_json(msg.content)
                 md = output.message
                 if output.code:
                     md += f"\n\n```python\n{output.code}\n```"
@@ -58,12 +65,9 @@ if prompt := st.chat_input("Message the agent…"):
                 _render_and_log("assistant", md)
                 status = st.empty()
 
-            elif isinstance(event, UserMessage):
+            case MessageEvent(message=msg) if isinstance(msg, UserMessage):
                 status.empty()
-                _render_and_log("system", f"```\n{event.content}\n```")
+                _render_and_log("system", f"```\n{msg.content}\n```")
                 status = st.empty()
-
-    except StopIteration as exc:
-        st.session_state.state = exc.value
 
     status.empty()

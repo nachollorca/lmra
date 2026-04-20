@@ -1,8 +1,8 @@
 """Contains the agentic loop and related utils."""
 
+from collections.abc import Generator, Iterator
 from dataclasses import dataclass, field
 from enum import StrEnum
-from typing import Generator, TypeAlias
 
 from lmdk import Message, UserMessage, complete
 from pydantic import BaseModel, Field
@@ -47,7 +47,30 @@ class Signal(StrEnum):
     EXCEEDED = "EXCEEDED"
 
 
-Event: TypeAlias = Signal | Message
+@dataclass(frozen=True)
+class Event:
+    """Base class for all events yielded by the agentic loop."""
+
+
+@dataclass(frozen=True)
+class SignalEvent(Event):
+    """A control-flow signal indicating the current stage."""
+
+    signal: Signal
+
+
+@dataclass(frozen=True)
+class MessageEvent(Event):
+    """A message appended to the conversation history."""
+
+    message: Message
+
+
+@dataclass(frozen=True)
+class SystemInstructionEvent(Event):
+    """The system instruction sent to the model."""
+
+    content: str
 
 
 def _complete(
@@ -56,7 +79,7 @@ def _complete(
     system_instruction: str,
 ) -> Generator[Event, None, Output]:
     """Single LM call: append the response, yield signals and the message, return parsed output."""
-    yield Signal.COMPLETION
+    yield SignalEvent(Signal.COMPLETION)
     response = complete(
         model=model,
         prompt=state.messages,
@@ -64,8 +87,8 @@ def _complete(
         output_schema=Output,
     )
     state.messages.append(response.message)
-    yield response.message
-    return response.output
+    yield MessageEvent(response.message)
+    return response.output  # noqa: B901 — consumed via yield-from
 
 
 def _init_session(state: State, base: type[DeclarativeBase]) -> None:
@@ -121,7 +144,7 @@ def run(
     model: str,
     tools: list[Tool] = [],
     allowed_imports: list[str] = [],
-) -> Generator[Event, None, State]:
+) -> Iterator[Event]:
     """Execute the agentic loop.
 
     An intermediate turn is one where the assistant message requests to run ``.code``.
@@ -135,15 +158,13 @@ def run(
         allowed_imports: Any vanilla module or third-party package that the agent can use.
 
     Yields:
-        ``Event``: every intermediate assistant message and loop signal.
-
-    Returns:
-        ``State``: possibly modified conversation, database snapshot and python namespace.
+        ``Event``: system instruction, loop signals, and conversation messages.
     """
     _init_session(state, base)
     descriptions = _init_namespace(state, base, tools)
 
     system_instruction = render(base=base, tools=tools, descriptions=descriptions)
+    yield SystemInstructionEvent(system_instruction)
 
     output = yield from _complete(state, model, system_instruction)
     code = output.code
@@ -151,25 +172,23 @@ def run(
     loops = 0
     while code:
         if loops >= MAX_LOOPS:
-            yield Signal.EXCEEDED
+            yield SignalEvent(Signal.EXCEEDED)
             break
         loops += 1
 
-        yield Signal.VALIDATION
+        yield SignalEvent(Signal.VALIDATION)
         if reason := validate(source=code, allowed_imports=allowed_imports):
             message = UserMessage(f"Code rejected: {reason}")
             state.messages.append(message)
-            yield message
+            yield MessageEvent(message)
             output = yield from _complete(state, model, system_instruction)
             code = output.code
             continue
 
-        yield Signal.EXECUTION
+        yield SignalEvent(Signal.EXECUTION)
         result = execute(source=code, namespace=state.namespace)
         message = UserMessage(f"Execution result:\n{result}")
         state.messages.append(message)
-        yield message
+        yield MessageEvent(message)
         output = yield from _complete(state, model, system_instruction)
         code = output.code
-
-    return state
