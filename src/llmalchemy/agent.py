@@ -152,9 +152,12 @@ def _init_namespace(
     state.namespace["session"] = state.session
     descriptions["session"] = "a `sqlalchemy.orm.Session` connected to the database."
 
-    for cls in base.__subclasses__():
+    orm_classes = base.__subclasses__()
+    for cls in orm_classes:
         state.namespace[cls.__name__] = cls
-        descriptions[cls.__name__] = "ORM model class (see schema above)."
+    if orm_classes:
+        names = ", ".join(cls.__name__ for cls in orm_classes)
+        descriptions[names] = "ORM model classes (see schema above)."
 
     for t in tools:
         state.namespace[t.name] = t.fn
