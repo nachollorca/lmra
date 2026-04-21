@@ -1,16 +1,16 @@
 # llmalchemy
 
-Every new operation you want to allow a user to perform on your application's data model means new logic, a new screen. Feature development is the bottleneck: translating between what the user would like to do and the rigid paths your code allows.
+Every new operation you want to allow a user to perform on your application's data model means new logic (backend) and a new screen (frontend). Then, the user has to learn how to perform that particular operation.
 
-`llmalchemy` removes that layer. Hand an LM your ORM schema and a sandboxed Python environment. It composes its own queries and transformations as code in a single turn. You do not need to define a thousand brittle GUIs for each possible action, nor a comprehensive but discrete set of tools for the LM to leverage. Users describe what they want from the application with natural language; the agent figures out how to make it happen.
+`llmalchemy` removes that layer. Hand an LM your ORM schema and a sandboxed Python environment. The user requests any operation through natural language. The agent composes its own queries and transformations as code in a single turn.
 
-In short: **user input → LM generates SQLAlchemy code → validate → execute → return results to LM → repeat until done**.
+You do not need to define a thousand GUIs for each possible action, nor a thousand tools for the LM to leverage (GET X, POST Y, etc.): the abstraction to freely manipulate the data model already exists: it is SQL. ORM and python add an infinite number of possibilities on top.
 
-See the complete motivation in **[Whitepaper](#whitepaper-why-llmalchemy)**
+**Read the complete motivation / reasoning in the [whitepaper](#whitepaper-why-llmalchemy)**
 
 ## Usage
 
-`uv add llmalchemy`, or use your favorite package manager (that should really be `uv` as of 2026).
+`uv add llmalchemy`, or use your favorite package manager
 
 The only thing you need to define upfront is your database schema through an sqlalchemy declarative base:
 ```python
@@ -115,7 +115,7 @@ for event in run( state=state, base=Base, model=model, allowed_imports=["datetim
 
 <details>
 <summary>Custom system prompt</summary>
-You can pass a Jinja template to override the [default one](src/llmalchemy/prompt.jinja).
+You can pass a Jinja template to override the default one (see `src/llmalchemy/prompt.jinja`).
 It is recommended that the template contains vars {{ SCHEMA }}, {{ SYMBOLS }} and {{ TOOLS }}.
 
 ```python
