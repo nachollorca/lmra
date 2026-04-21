@@ -59,6 +59,18 @@ for event in run(state=state, base=Base, model=model):
     print(event)
 ```
 
+Example output (abbreviated):
+```text
+SystemInstructionEvent(content='You are a coding agent... SCHEMA: class Author...')
+SignalEvent(signal=<Signal.COMPLETION: 'COMPLETION'>)
+MessageEvent(message=AssistantMessage(message="I'll add the authors and their books.", code="a1 = Author(name='J.R.R. Tolkien')\na2 = Author(name='Dhalia de la Cerda')\nsession.add_all([a1, a2])\nsession.flush()\nsession.add_all([\n    Book(title='The Hobbit', author_id=a1.id),\n    Book(title='The Lord of the Rings', author_id=a1.id),\n    Book(title='Desde los zulos', author_id=a2.id),\n    Book(title='Perras de reserva', author_id=a2.id),\n])\nsession.commit()\nprint('ok')"))
+SignalEvent(signal=<Signal.VALIDATION: 'VALIDATION'>)
+SignalEvent(signal=<Signal.EXECUTION: 'EXECUTION'>)
+MessageEvent(message=UserMessage(content='Execution result:\nok\n'))
+SignalEvent(signal=<Signal.COMPLETION: 'COMPLETION'>)
+MessageEvent(message=AssistantMessage(message='Done — added Tolkien and Dhalia de la Cerda with two books each.', code=''))
+```
+
 The `state` presists across calls, just append a new UserMessage and call run() again to continue the conversation.
 
 <details>
@@ -81,6 +93,20 @@ for event in run(state=state, base=Base, model=model, tools=[get_author_catalog]
     print(event)
 ```
 
+Example output (abbreviated):
+```text
+SignalEvent(signal=<Signal.COMPLETION: 'COMPLETION'>)
+MessageEvent(message=AssistantMessage(message='Let me check the tool signature first.', code="disclose('get_author_catalog')"))
+SignalEvent(signal=<Signal.EXECUTION: 'EXECUTION'>)
+MessageEvent(message=UserMessage(content="Execution result:\nget_author_catalog(author: str, session: Session) -> list[str]\nList all book titles for the given author.\n"))
+SignalEvent(signal=<Signal.COMPLETION: 'COMPLETION'>)
+MessageEvent(message=AssistantMessage(message='', code="print(get_author_catalog('Dhalia de la Cerda', session))"))
+SignalEvent(signal=<Signal.EXECUTION: 'EXECUTION'>)
+MessageEvent(message=UserMessage(content="Execution result:\n['Desde los zulos', 'Perras de reserva']\n"))
+SignalEvent(signal=<Signal.COMPLETION: 'COMPLETION'>)
+MessageEvent(message=AssistantMessage(message="Dhalia de la Cerda's catalog: 'Desde los zulos' and 'Perras de reserva'.", code=''))
+```
+
 Only the tool name and first docstring line are shown to the agent up-front.
 The agent calls `disclose("get_author_catalog")` to inspect the full signature on demand.
 </details>
@@ -94,6 +120,22 @@ Whitelist any stdlib or third-party module the agent may need.
 state.messages.append(UserMessage("what day is today?"))
 for event in run( state=state, base=Base, model=model, allowed_imports=["datetime"]):
     print(event)
+```
+
+Example output (abbreviated):
+```text
+SignalEvent(signal=<Signal.COMPLETION: 'COMPLETION'>)
+MessageEvent(message=AssistantMessage(message='', code='import datetime\nprint(datetime.date.today().isoformat())'))
+SignalEvent(signal=<Signal.VALIDATION: 'VALIDATION'>)
+SignalEvent(signal=<Signal.EXECUTION: 'EXECUTION'>)
+MessageEvent(message=UserMessage(content='Execution result:\n2026-04-21\n'))
+SignalEvent(signal=<Signal.COMPLETION: 'COMPLETION'>)
+MessageEvent(message=AssistantMessage(message='Today is 2026-04-21.', code=''))
+```
+
+If the agent tries to import something not whitelisted, validation fails and it gets a second chance:
+```text
+MessageEvent(message=UserMessage(content="Code rejected: import of 'os' is not allowed"))
 ```
 </details>
 
@@ -111,6 +153,11 @@ for event in run(
     prompt_template="path/to/prompt.jinja",
 ):
     print(event)
+```
+
+The emitted events are the same as in the minimal example; only the `SystemInstructionEvent` content changes to reflect your custom template:
+```text
+SystemInstructionEvent(content='Write python code to answer user requests. You have access to <schema...>, <symbols...> and <tools...>')
 ```
 </details>
 
@@ -133,7 +180,14 @@ for event in run(
     output_extensions=Reasoning,
 ):
     print(event)
-# Extra fields ride along on the yielded AssistantMessage for you to consume.
+# Extra fields ride along on the yielded AssistantMessage for you to consume:
+#
+# MessageEvent(message=AssistantMessage(
+#     thoughts='The user asked X; I should query Y then aggregate by Z.',
+#     confidence=0.82,
+#     message='Here are the results ...',
+#     code='...',
+# ))
 ```
 </details>
 
