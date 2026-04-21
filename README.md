@@ -1,10 +1,10 @@
 # llmalchemy
 
-Every new operation you want to allow a user to perform on your application's data model means new logic (backend) and a new screen (frontend). Then, the user has to learn how to perform that particular operation.
+Every **new operation** you want to allow a user to perform on your application's data model means **new logic** (backend) and a **new screen** (frontend). Then, the user has to learn how to perform that particular operation.
 
-`llmalchemy` removes that layer. Hand an LM your ORM schema and a sandboxed Python environment. The user requests any operation through natural language. The agent composes its own queries and transformations as code in a single turn.
+`llmalchemy` removes that layer. Hand an LM your ORM schema and a sandboxed Python environment. **The user requests any operation through natural language**. The agent composes its own queries and transformations as code in a single turn.
 
-You do not need to define a thousand GUIs for each possible action, nor a thousand tools for the LM to leverage (GET X, POST Y, etc.): the abstraction to freely manipulate the data model already exists: it is SQL. ORM and python add an infinite number of possibilities on top.
+**You do not need to define a thousand GUIs for each possible action, nor a thousand tools for the LM to leverage** (GET X, POST Y, etc.): the abstraction to freely manipulate the data model already exists: it is SQL. ORM and python add an infinite number of possibilities on top.
 
 ![gui-vs-nli](docs/diagrams/gui-vs-nli.png)
 
@@ -60,24 +60,6 @@ for event in run(state=state, base=Base, model=model):
 ```
 
 The `state` presists across calls, just append a new UserMessage and call run() again to continue the conversation.
-
-<details>
-<summary>Handling events</summary>
-Typically, you would want to consume the streamed events as the agent operates like this:
-
-```python
-from llmalchemy.agent import MessageEvent, SignalEvent, SystemInstructionEvent
-
-for event in run(state=state, base=Base, model=model):
-    match event:
-        case SystemInstructionEvent(content=s):
-            ...  # shown once at the start of the loop
-        case SignalEvent(signal=sig):
-            ...  # COMPLETION | VALIDATION | EXECUTION | EXCEEDED
-        case MessageEvent(message=msg):
-            ...  # every message appended to state.messages
-```
-</details>
 
 <details>
 <summary>Custom tools</summary>
