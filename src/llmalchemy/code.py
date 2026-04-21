@@ -1,7 +1,7 @@
 """Contains the logic for the sandboxed python env on which to run the agent requested code.
 
 HuggingFace has a very nice reference for further ideas:
-https://github.com/huggingface/smolagents/blob/main/src/smolagents/local_python_executor.py .
+https://github.com/huggingface/smolagents/blob/main/src/smolagents/local_python_executor.py
 """
 
 import ast

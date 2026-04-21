@@ -1,16 +1,18 @@
 # llmalchemy
 
-Every new operation you want to allow a user to perform on your application's data model means new logic, a new screen. Feature development is the bottleneck: translating between what the user would like to do and the rigid paths your code allows.
+Every **new operation** you want to allow a user to perform on your application's data model means **new logic** (backend) and a **new screen** (frontend). Then, the user has to learn how to perform that particular operation.
 
-`llmalchemy` removes that layer. Hand an LM your ORM schema and a sandboxed Python environment. It composes its own queries and transformations as code in a single turn. You do not need to define a thousand brittle GUIs for each possible action, nor a comprehensive but discrete set of tools for the LM to leverage. Users describe what they want from the application with natural language; the agent figures out how to make it happen.
+`llmalchemy` removes that layer. Hand an LM your ORM schema and a sandboxed Python environment. **The user requests any operation through natural language**. The agent composes its own queries and transformations as code in a single turn.
 
-In short: **user input → LM generates SQLAlchemy code → validate → execute → return results to LM → repeat until done**.
+**You do not need to define a thousand GUIs for each possible action, nor a thousand tools for the LM to leverage** (GET X, POST Y, etc.): the abstraction to freely manipulate the data model already exists: it is SQL. ORM and python add an infinite number of possibilities on top.
 
-See the complete motivation in **[Whitepaper](#whitepaper-why-llmalchemy)**
+![gui-vs-nli](docs/diagrams/gui-vs-nli.png)
+
+**Read the complete motivation / reasoning in the [whitepaper](#whitepaper-why-llmalchemy)**
 
 ## Usage
 
-`uv add llmalchemy`, or use your favorite package manager (that should really be `uv` as of 2026).
+`uv add llmalchemy`, or use your favorite package manager
 
 The only thing you need to define upfront is your database schema through an sqlalchemy declarative base:
 ```python
@@ -57,25 +59,19 @@ for event in run(state=state, base=Base, model=model):
     print(event)
 ```
 
-The `state` presists across calls, just append a new UserMessage and call run() again to continue the conversation.
-
-<details>
-<summary>Handling events</summary>
-Typically, you would want to consume the streamed events as the agent operates like this:
-
-```python
-from llmalchemy.agent import MessageEvent, SignalEvent, SystemInstructionEvent
-
-for event in run(state=state, base=Base, model=model):
-    match event:
-        case SystemInstructionEvent(content=s):
-            ...  # shown once at the start of the loop
-        case SignalEvent(signal=sig):
-            ...  # COMPLETION | VALIDATION | EXECUTION | EXCEEDED
-        case MessageEvent(message=msg):
-            ...  # every message appended to state.messages
+Example output (abbreviated):
+```text
+SystemInstructionEvent(content='You are a coding agent... SCHEMA: class Author...')
+SignalEvent(signal=<Signal.COMPLETION: 'COMPLETION'>)
+MessageEvent(message=AssistantMessage(message="I'll add the authors and their books.", code="a1 = Author(name='J.R.R. Tolkien')\na2 = Author(name='Dhalia de la Cerda')\nsession.add_all([a1, a2])\nsession.flush()\nsession.add_all([\n    Book(title='The Hobbit', author_id=a1.id),\n    Book(title='The Lord of the Rings', author_id=a1.id),\n    Book(title='Desde los zulos', author_id=a2.id),\n    Book(title='Perras de reserva', author_id=a2.id),\n])\nsession.commit()\nprint('ok')"))
+SignalEvent(signal=<Signal.VALIDATION: 'VALIDATION'>)
+SignalEvent(signal=<Signal.EXECUTION: 'EXECUTION'>)
+MessageEvent(message=UserMessage(content='Execution result:\nok\n'))
+SignalEvent(signal=<Signal.COMPLETION: 'COMPLETION'>)
+MessageEvent(message=AssistantMessage(message='Done — added Tolkien and Dhalia de la Cerda with two books each.', code=''))
 ```
-</details>
+
+The `state` presists across calls, just append a new UserMessage and call run() again to continue the conversation.
 
 <details>
 <summary>Custom tools</summary>
@@ -97,6 +93,20 @@ for event in run(state=state, base=Base, model=model, tools=[get_author_catalog]
     print(event)
 ```
 
+Example output (abbreviated):
+```text
+SignalEvent(signal=<Signal.COMPLETION: 'COMPLETION'>)
+MessageEvent(message=AssistantMessage(message='Let me check the tool signature first.', code="disclose('get_author_catalog')"))
+SignalEvent(signal=<Signal.EXECUTION: 'EXECUTION'>)
+MessageEvent(message=UserMessage(content="Execution result:\nget_author_catalog(author: str, session: Session) -> list[str]\nList all book titles for the given author.\n"))
+SignalEvent(signal=<Signal.COMPLETION: 'COMPLETION'>)
+MessageEvent(message=AssistantMessage(message='', code="print(get_author_catalog('Dhalia de la Cerda', session))"))
+SignalEvent(signal=<Signal.EXECUTION: 'EXECUTION'>)
+MessageEvent(message=UserMessage(content="Execution result:\n['Desde los zulos', 'Perras de reserva']\n"))
+SignalEvent(signal=<Signal.COMPLETION: 'COMPLETION'>)
+MessageEvent(message=AssistantMessage(message="Dhalia de la Cerda's catalog: 'Desde los zulos' and 'Perras de reserva'.", code=''))
+```
+
 Only the tool name and first docstring line are shown to the agent up-front.
 The agent calls `disclose("get_author_catalog")` to inspect the full signature on demand.
 </details>
@@ -111,11 +121,27 @@ state.messages.append(UserMessage("what day is today?"))
 for event in run( state=state, base=Base, model=model, allowed_imports=["datetime"]):
     print(event)
 ```
+
+Example output (abbreviated):
+```text
+SignalEvent(signal=<Signal.COMPLETION: 'COMPLETION'>)
+MessageEvent(message=AssistantMessage(message='', code='import datetime\nprint(datetime.date.today().isoformat())'))
+SignalEvent(signal=<Signal.VALIDATION: 'VALIDATION'>)
+SignalEvent(signal=<Signal.EXECUTION: 'EXECUTION'>)
+MessageEvent(message=UserMessage(content='Execution result:\n2026-04-21\n'))
+SignalEvent(signal=<Signal.COMPLETION: 'COMPLETION'>)
+MessageEvent(message=AssistantMessage(message='Today is 2026-04-21.', code=''))
+```
+
+If the agent tries to import something not whitelisted, validation fails and it gets a second chance:
+```text
+MessageEvent(message=UserMessage(content="Code rejected: import of 'os' is not allowed"))
+```
 </details>
 
 <details>
 <summary>Custom system prompt</summary>
-You can pass a Jinja template to override the [default one](src/llmalchemy/prompt.jinja).
+You can pass a Jinja template to override the default one (see `src/llmalchemy/prompt.jinja`).
 It is recommended that the template contains vars {{ SCHEMA }}, {{ SYMBOLS }} and {{ TOOLS }}.
 
 ```python
@@ -127,6 +153,11 @@ for event in run(
     prompt_template="path/to/prompt.jinja",
 ):
     print(event)
+```
+
+The emitted events are the same as in the minimal example; only the `SystemInstructionEvent` content changes to reflect your custom template:
+```text
+SystemInstructionEvent(content='Write python code to answer user requests. You have access to <schema...>, <symbols...> and <tools...>')
 ```
 </details>
 
@@ -149,9 +180,44 @@ for event in run(
     output_extensions=Reasoning,
 ):
     print(event)
-# Extra fields ride along on the yielded AssistantMessage for you to consume.
+# Extra fields ride along on the yielded AssistantMessage for you to consume:
+#
+# MessageEvent(message=AssistantMessage(
+#     thoughts='The user asked X; I should query Y then aggregate by Z.',
+#     confidence=0.82,
+#     message='Here are the results ...',
+#     code='...',
+# ))
 ```
 </details>
+
+## How it works
+In short: **user input → LM generates SQLAlchemy code → validate → execute → return results to LM → repeat until done**
+
+```mermaid
+flowchart TD
+    Start([run]) --> Init[Initialize session,<br/>namespace, system prompt]
+    Init --> Complete[LM completion<br/>→ message + code]
+    Complete --> HasCode{code?}
+    HasCode -- no --> End([return to user])
+    HasCode -- yes --> MaxLoops{loops ≥ MAX?}
+    MaxLoops -- yes --> Exceeded[signal: EXCEEDED] --> End
+    MaxLoops -- no --> Validate[validate code]
+    Validate --> Valid{valid?}
+    Valid -- no --> Reject[append 'Code rejected'<br/>user message]
+    Reject --> Complete
+    Valid -- yes --> Execute[execute code<br/>in namespace]
+    Execute --> Result[append 'Execution result'<br/>user message]
+    Result --> Complete
+```
+
+1. **Schema as context** (`context.py`): The source code of your ORM classes is extracted via `inspect.getsource` and rendered into a Jinja system prompt alongside available symbols and tools.
+
+2. **Agentic loop** (`agent.py`): The LM produces structured output — a message and optional Python code. If code is present, it's validated, executed, and the result is fed back as a user message. The loop continues until the LM responds without code or hits `MAX_LOOPS`.
+
+3. **Sandboxed execution** (`code.py`): An AST pass blocks dangerous builtins (`exec`, `eval`, `open`…), forbidden modules (`os`, `subprocess`…), dangerous dunder access, and enforces an import whitelist. Safe code runs in a persistent namespace with stdout captured.
+
+4. **Optional tools** (`tools.py`): Developers can register custom functions with the `@tool` decorator. Only tool names and one-liners appear in the prompt — the LM calls `disclose(name)` to see full signatures on demand, keeping the context window lean.
 
 ## Whitepaper (why `llmalchemy`)
 
