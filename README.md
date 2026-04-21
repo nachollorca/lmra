@@ -6,6 +6,8 @@ Every new operation you want to allow a user to perform on your application's da
 
 You do not need to define a thousand GUIs for each possible action, nor a thousand tools for the LM to leverage (GET X, POST Y, etc.): the abstraction to freely manipulate the data model already exists: it is SQL. ORM and python add an infinite number of possibilities on top.
 
+![gui-vs-nli](docs/diagrams/gui-vs-nli.png)
+
 **Read the complete motivation / reasoning in the [whitepaper](#whitepaper-why-llmalchemy)**
 
 ## Usage
@@ -152,6 +154,34 @@ for event in run(
 # Extra fields ride along on the yielded AssistantMessage for you to consume.
 ```
 </details>
+
+## How it works
+In short: **user input → LM generates SQLAlchemy code → validate → execute → return results to LM → repeat until done**
+
+```mermaid
+flowchart TD
+    Start([run]) --> Init[Initialize session,<br/>namespace, system prompt]
+    Init --> Complete[LM completion<br/>→ message + code]
+    Complete --> HasCode{code?}
+    HasCode -- no --> End([return to user])
+    HasCode -- yes --> MaxLoops{loops ≥ MAX?}
+    MaxLoops -- yes --> Exceeded[signal: EXCEEDED] --> End
+    MaxLoops -- no --> Validate[validate code]
+    Validate --> Valid{valid?}
+    Valid -- no --> Reject[append 'Code rejected'<br/>user message]
+    Reject --> Complete
+    Valid -- yes --> Execute[execute code<br/>in namespace]
+    Execute --> Result[append 'Execution result'<br/>user message]
+    Result --> Complete
+```
+
+1. **Schema as context** (`context.py`): The source code of your ORM classes is extracted via `inspect.getsource` and rendered into a Jinja system prompt alongside available symbols and tools.
+
+2. **Agentic loop** (`agent.py`): The LM produces structured output — a message and optional Python code. If code is present, it's validated, executed, and the result is fed back as a user message. The loop continues until the LM responds without code or hits `MAX_LOOPS`.
+
+3. **Sandboxed execution** (`code.py`): An AST pass blocks dangerous builtins (`exec`, `eval`, `open`…), forbidden modules (`os`, `subprocess`…), dangerous dunder access, and enforces an import whitelist. Safe code runs in a persistent namespace with stdout captured.
+
+4. **Optional tools** (`tools.py`): Developers can register custom functions with the `@tool` decorator. Only tool names and one-liners appear in the prompt — the LM calls `disclose(name)` to see full signatures on demand, keeping the context window lean.
 
 ## Whitepaper (why `llmalchemy`)
 
