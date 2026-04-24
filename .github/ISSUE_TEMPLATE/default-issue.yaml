@@ -1,6 +1,5 @@
 name: Default Issue
 description: File a default issue with structured information
-projects: ["quak"]
 body:
   - type: markdown
     attributes:
