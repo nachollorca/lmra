@@ -1,3 +1,4 @@
+# Project metadata ------------------------------------------------------------
 [project]
 name = "llmalchemy"
 version = "1.4.0"
@@ -11,19 +12,26 @@ dependencies = [
     "sqlalchemy"
 ]
 
+# Dev / optional dependencies -------------------------------------------------
 [dependency-groups]
 dev = [
     "pytest-cov",
     "streamlit>=1.56.0",
-]  # complexipy, ruff, ty are run via uvx
+]  # complexipy, ruff, ty must be installed globally via uvx / uv tool
 
+# Build backend ---------------------------------------------------------------
 [build-system]
 requires = ["uv_build>=0.11.1,<0.12.0"]
 build-backend = "uv_build"
 
+# Ruff (lint + format) --------------------------------------------------------
 [tool.ruff]
 fix = true
 line-length = 100
+
+[tool.ruff.lint]
+select = ["D", "E", "F", "I", "UP", "B", "SIM", "RUF"]
+ignore = ["D105", "D107"]
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"
@@ -31,24 +39,7 @@ convention = "google"
 [tool.ruff.lint.per-file-ignores]
 "tests/*" = ["D"]
 
-[tool.ruff.lint.isort]
-combine-as-imports = true
-
-[tool.ruff.lint]
-select = ["D", "E", "F"]
-ignore = ["D105", "D107"]
-
-[tool.coverage.run]
-source = ["src"]
-omit = ["tests/*"]
-
-[tool.coverage.report]
-exclude_lines = [
-    "pragma: no cover",
-    "raise NotImplementedError",
-    "if TYPE_CHECKING:",
-]
-
+# Semantic release (automated versioning from conventional commits) -----------
 [tool.semantic_release]
 version_toml = ["pyproject.toml:project.version"]
 build_command = ""

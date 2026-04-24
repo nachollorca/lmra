@@ -1,36 +1,39 @@
 set dotenv-load := true
 
+# Python environment ----------------------------------------------------------
 sync:
     uv lock --upgrade
-    uv sync --all-extras
+    uv sync --all-extras --all-groups
 
 reset-env:
     rm -rf .venv
     uv sync
 
+# Pre-commit hooks ------------------------------------------------------------
 install-hooks:
     prek install
-    prek install --hook-type commit-msg
 
+update-hooks:
+    prek auto-update
+
+# Code quality ----------------------------------------------------------------
 format:
-    uvx ruff check --select I --fix .
-    uvx ruff format .
-
-test target="":
-    uv run pytest --cov --cov-fail-under=90 {{ target }}
+    ruff check --select I --fix .
+    ruff format .
 
 check-types:
-    uvx ty check src
+    ty check src
 
-ipython:
-    uv run ipython
-
-analyze-complexity:
+check-complexity:
     uvx complexipy src
+
+# Test and run ----------------------------------------------------------------
+test target="":
+    uv run pytest --cov --cov-fail-under=90 {{ target }}
 
 run file:
     uv run --env-file .env {{ file }}
 
-# Project specific commands
+# Project specific commands ---------------------------------------------------
 demo:
     uv run streamlit run demo/app.py
