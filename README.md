@@ -10,9 +10,11 @@ Every **new operation** you want to allow a user to perform on your application'
 
 **Read the complete motivation / reasoning in the [whitepaper](#whitepaper-why-llmalchemy)**
 
-## Usage
+## Installation
 
 `uv add llmalchemy`, or use your favorite package manager
+
+## Usage
 
 The only thing you need to define upfront is your database schema through an sqlalchemy declarative base:
 ```python
@@ -286,3 +288,5 @@ We use `just` for development tasks. Use:
 
 ## License
 MIT
+
+_Done with [`mold`](https://github.com/nachollorca/mold) template_
