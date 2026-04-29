@@ -1,4 +1,4 @@
-# llmalchemy
+![banner](assets/banner.png)
 
 Every **new operation** you want to allow a user to perform on your application's data model means **new logic** (backend) and a **new screen** (frontend). Then, the user has to learn how to perform that particular operation.
 
@@ -6,7 +6,7 @@ Every **new operation** you want to allow a user to perform on your application'
 
 **You do not need to define a thousand GUIs for each possible action, nor a thousand tools for the LM to leverage** (GET X, POST Y, etc.): the abstraction to freely manipulate the data model already exists: it is SQL. ORM and python add an infinite number of possibilities on top.
 
-![gui-vs-nli](docs/diagrams/gui-vs-nli.png)
+![gui-vs-nli](assets/gui-vs-nli.png)
 
 **Read the complete motivation / reasoning in the [whitepaper](#whitepaper-why-llmalchemy)**
 
