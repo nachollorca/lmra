@@ -73,7 +73,7 @@ SignalEvent(signal=<Signal.COMPLETION: 'COMPLETION'>)
 MessageEvent(message=AssistantMessage(message='Done — added Tolkien and Dhalia de la Cerda with two books each.', code=''))
 ```
 
-The `state` persists across calls, just append a new UserMessage and call run() again to continue the conversation.
+The `state` persists across calls, just append a new `UserMessage` and call `run()` again to continue the conversation.
 
 <details>
 <summary>Custom tools</summary>
