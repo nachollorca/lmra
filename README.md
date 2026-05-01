@@ -51,7 +51,7 @@ model = "vertex:gemini-3-flash-preview"
 ```
 
 For the minimal run, append the first message to the conversation and simply iterate over the `run` call.
-You will recieve `Events` with the messages and code results performed by the agent, together with precise signals indicating the agents loop state (waiting for the LM completion, executing code, etc.):
+You will receive `Events` with the messages and code results performed by the agent, together with precise signals indicating the agents loop state (waiting for the LM completion, executing code, etc.):
 
 ```python
 state = State()
@@ -73,7 +73,7 @@ SignalEvent(signal=<Signal.COMPLETION: 'COMPLETION'>)
 MessageEvent(message=AssistantMessage(message='Done — added Tolkien and Dhalia de la Cerda with two books each.', code=''))
 ```
 
-The `state` presists across calls, just append a new UserMessage and call run() again to continue the conversation.
+The `state` persists across calls, just append a new UserMessage and call run() again to continue the conversation.
 
 <details>
 <summary>Custom tools</summary>
@@ -90,7 +90,7 @@ def get_author_catalog(author: str, session: Session) -> list[str]:
     obj = session.query(Author).filter(Author.name == author).first()
     return [b.title for b in obj.books] if obj else []
 
-state.messages.append(UserMessage("whats the catalog for Dhalia de la Cerda?"))
+state.messages.append(UserMessage("what's the catalog for Dhalia de la Cerda?"))
 for event in run(state=state, base=Base, model=model, tools=[get_author_catalog]):
     print(event)
 ```
@@ -262,13 +262,15 @@ Application data is a different beast. Dozens of entity types, foreign keys, man
 
 ## Development
 
+This package uses [`lmdk`](https://github.com/nachollorca/lmdk) to inference LLMs.
+
 ### Structure
 ```
 src/llmalchemy/
 ├── agent.py      # Entrypoint for the agentic loop
 ├── code.py       # Sandboxed python env on which to run the agent requested code
 ├── context.py    # Utils to engineer the context passed to the agent
-├── datbase.py    # Utils that access or modify the database
+├── database.py    # Utils that access or modify the database
 ├── prompt.jinja  # Default system instruction template
 └── tools.py      # Logic to expose functions to the model
 ```
@@ -281,6 +283,8 @@ We use `just` for development tasks. Use:
 - `just check-complexity`: Cyclomatic complexity checks with `complexipy`.
 - `just test`: Runs pytest with 90% coverage threshold.
 
+See [`justfile`](justfile) for a complete list of dev commands.
+
 ### Contribute
 1. **Hooks**: Install pre-commit hooks via `just install-hooks`. PRs will fail CI if linting/formatting is not applied.
 2. **Issues**: Open an issue first using the default template.
@@ -289,4 +293,4 @@ We use `just` for development tasks. Use:
 ## License
 MIT
 
-_Done with [`mold`](https://github.com/nachollorca/mold) template_
+_Made with [`mold`](https://github.com/nachollorca/mold) template_

@@ -1,8 +1,9 @@
 """Logic to expose functions to the model."""
 
 import inspect
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Callable, Protocol
+from typing import Any, Protocol
 
 
 class HasMetadata(Protocol):
@@ -35,10 +36,7 @@ class Tool:
         doc = inspect.cleandoc(getattr(fn, "__doc__", "") or "")
         short = doc.split("\n", 1)[0] if doc else ""
         sig = inspect.signature(fn)
-        if doc:
-            full = f'def {name}{sig}:\n    """{doc}"""'
-        else:
-            full = f"def {name}{sig}:"
+        full = f'def {name}{sig}:\n    """{doc}"""' if doc else f"def {name}{sig}:"
         return cls(fn=fn, name=name, short_description=short, full_description=full)
 
 
