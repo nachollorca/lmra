@@ -93,7 +93,7 @@ def _complete(
     state.messages.append(response.message)
     yield MessageEvent(response.message)
     assert isinstance(response.output, Output)
-    return response.output  # noqa: B901 — consumed via yield-from
+    return response.output
 
 
 def _build_output_schema(output_extensions: type[BaseModel] | None) -> type[Output]:

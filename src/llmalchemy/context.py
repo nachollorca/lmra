@@ -80,10 +80,7 @@ def render(
             SYMBOLS=_render_symbols(descriptions),
             TOOLS=_render_tools_summary(tools),
         )
-    if isinstance(template, Path):
-        source = template.read_text()
-    else:
-        source = template
+    source = template.read_text() if isinstance(template, Path) else template
     _check_markers(source)
     return render_template(
         template=source,
