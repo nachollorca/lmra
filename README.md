@@ -12,7 +12,7 @@ Every **new operation** you want to allow a user to perform on your application'
 
 ## Installation
 
-`uv add llmalchemy`, or use your favorite package manager
+`uv add llmalchemy`
 
 ## Usage
 
