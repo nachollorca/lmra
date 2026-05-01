@@ -2,6 +2,69 @@
 
 <!-- version list -->
 
+## v1.4.1 (2026-05-01)
+
+### Bug Fixes
+
+- Force semantic release
+  ([`23486a1`](https://github.com/nachollorca/llmalchemy/commit/23486a1c9ee69af652d3b41457e459879f112211))
+
+### Chores
+
+- Remove test script from the demo
+  ([`a60784f`](https://github.com/nachollorca/llmalchemy/commit/a60784f1a9e35f38ddb805481211514a1309c262))
+
+### Continuous Integration
+
+- Upgrade to mold template and add lmdk to the readme
+  ([`a0432f2`](https://github.com/nachollorca/llmalchemy/commit/a0432f2c687b938eb3171420b984ee91694008a4))
+
+### Documentation
+
+- Add output examples
+  ([`4ca35fb`](https://github.com/nachollorca/llmalchemy/commit/4ca35fbb9d433e5d05583b4d82c05f9ef32b763d))
+
+- Format the readme properly
+  ([`489c817`](https://github.com/nachollorca/llmalchemy/commit/489c8170a9703f877706ee72518d5567c9e54692))
+
+- Homogenize sections in readme, add mold reference
+  ([`3b310b9`](https://github.com/nachollorca/llmalchemy/commit/3b310b97c240ac9639f5580fffbfc3aeb0f5709c))
+
+- Improve readme
+  ([`a44d336`](https://github.com/nachollorca/llmalchemy/commit/a44d33691713d98e3571ddd81d32f07e7fc4ba88))
+
+- Improve readme lol
+  ([`7d15e55`](https://github.com/nachollorca/llmalchemy/commit/7d15e559f2df50dadfb46051431f3837f9b7fa48))
+
+- Improve usage
+  ([`3641b7e`](https://github.com/nachollorca/llmalchemy/commit/3641b7e917b010c57c302a3e75b5f0acd55729f8))
+
+- Include diagrams
+  ([`8d0e138`](https://github.com/nachollorca/llmalchemy/commit/8d0e138856e8371aa508536a354d627c41f2357c))
+
+- Include usage with all extra stuff
+  ([`a6268d4`](https://github.com/nachollorca/llmalchemy/commit/a6268d462696618f6c53fe94581a699237698145))
+
+- Move around where assets are located, update readme
+  ([`fff9b7e`](https://github.com/nachollorca/llmalchemy/commit/fff9b7eb7c62fa88102710816bf9103547dd452e))
+
+- Remove event handling, users can find it on their own
+  ([`40597f4`](https://github.com/nachollorca/llmalchemy/commit/40597f48c2038498190644ead358cbc5d3dbe8a4))
+
+- Remove unnecessary stuff
+  ([`93b293e`](https://github.com/nachollorca/llmalchemy/commit/93b293e1543a071796f0f158f896580bd37fc159))
+
+### Refactoring
+
+- Remove unused __show__ attribute
+  ([`175e1a2`](https://github.com/nachollorca/llmalchemy/commit/175e1a2af6ab477060e47aac9a5e3341f5e6fe6e))
+
+### Testing
+
+- Do them tests
+  ([`726e0a4`](https://github.com/nachollorca/llmalchemy/commit/726e0a4e3dbada26f0a7f4a954fbd13594be2cf1))
+
+
 ## v1.4.0 (2026-04-20)
 
 ### Chores
